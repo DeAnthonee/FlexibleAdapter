@@ -50,6 +50,7 @@
   let reconnectDelay = 1000;
   let autoModal = null;     // which automatic modal is open: 'yield' | 'decision:<id>' | 'gameover' | null
   let lastSeq = -1;         // last batch of engine events we animated
+  let botsToAdd = 0;        // "Practice vs computers": bots to add once the game is created
   let lastBuyKey = '';      // detects the moment my buy step starts (auto-open the shop sheet on phones)
   const isMobile = () => window.matchMedia('(max-width: 720px), (max-height: 540px)').matches;
 
@@ -121,6 +122,7 @@
       case 'joined':
         me = { code: msg.code, playerId: msg.playerId, token: msg.token };
         saveSession(me);
+        while (botsToAdd > 0) { send({ type: 'addBot' }); botsToAdd--; }
         dismissedGameOver = false;
         $('#toast').hidden = true;
         $('#home-error').hidden = true;
@@ -196,6 +198,11 @@
     const name = homeValid(); if (!name) return;
     send({ type: 'create', name, monster: selectedMonster });
   });
+  $('#btn-practice').addEventListener('click', () => {
+    const name = homeValid(); if (!name) return;
+    botsToAdd = 2;
+    send({ type: 'create', name, monster: selectedMonster });
+  });
   $('#btn-join').addEventListener('click', () => {
     const name = homeValid(); if (!name) return;
     const code = $('#join-code').value.trim().toUpperCase();
@@ -213,6 +220,7 @@
 
   // ------------------------------------------------------------ lobby
   $('#btn-start').addEventListener('click', () => send({ type: 'start' }));
+  $('#btn-add-bot').addEventListener('click', () => send({ type: 'addBot' }));
   $('#opt-powers').addEventListener('change', (e) => send({ type: 'setOptions', options: { powers: e.target.checked } }));
   $('#btn-leave').addEventListener('click', () => send({ type: 'leave' }));
   $('#btn-copy-link').addEventListener('click', async () => {
@@ -230,11 +238,15 @@
       list.append(el('li', { style: `--mc:${m.color}` },
         art(m, 'art lobby-art', { thumb: true }),
         el('span', {}, el('b', {}, p.name), ' ', el('span', { class: 'hint', style: 'margin:0' }, m.name)),
+        p.bot ? el('span', { class: 'tag' }, '🤖 computer') : null,
         p.id === state.hostId ? el('span', { class: 'tag' }, 'host') : null,
         p.id === me.playerId ? el('span', { class: 'tag' }, 'you') : null,
+        p.bot && state.hostId === me.playerId ? el('button', { class: 'btn tiny remove-bot', title: 'Remove this computer player', onclick: () => send({ type: 'removeBot', botId: p.id }) }, '✕') : null,
       ));
     }
     const isHost = state.hostId === me.playerId;
+    $('#bot-row').hidden = !isHost;
+    $('#btn-add-bot').disabled = state.players.length >= 6;
     const powersOn = !!(state.options && state.options.powers);
     const chk = $('#opt-powers');
     chk.checked = powersOn;
@@ -376,8 +388,9 @@
         el('div', { class: 'names' }, el('div', { class: 'name' }, p.name), el('div', { class: 'sub' }, m.name)),
         el('div', { class: 'badges' },
           inTokyo ? el('span', { class: 'badge' }, 'Tokyo') : null,
+          p.bot ? el('span', { class: 'badge bot' }, '🤖 bot') : null,
           p.id === state.hostId && p.id !== me.playerId ? el('span', { class: 'badge host' }, 'host') : null,
-          !p.connected && p.alive ? el('span', { class: 'badge off' }, 'offline') : null,
+          !p.connected && p.alive && !p.bot ? el('span', { class: 'badge off' }, 'offline') : null,
           p.left ? el('span', { class: 'badge off' }, 'left') : null,
         ),
       ));

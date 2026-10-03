@@ -216,6 +216,10 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .lobby-players .tag { margin-left: auto; font-size: .7rem; color: var(--cyan); text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
 .lobby-players .tag + .tag { margin-left: 8px; }
 
+.bot-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; text-align: left; }
+.lobby-players .remove-bot { margin-left: 6px; }
+.badge.bot { background: var(--cyan); color: #04202a; }
+
 /* ---------------------------------------------------- game options */
 .option-box { background: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 4px 0 10px; text-align: left; }
 .toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; }

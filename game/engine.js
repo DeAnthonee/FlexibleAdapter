@@ -152,7 +152,7 @@ export class Game {
   }
 
   // -------------------------------------------------------------- lobby
-  addPlayer(id, name, monsterId) {
+  addPlayer(id, name, monsterId, { bot = false } = {}) {
     if (this.phase !== 'lobby') throw new GameError('Game already started.');
     if (this.players.length >= MAX_PLAYERS) throw new GameError('Game is full.');
     name = String(name || '').trim().slice(0, 20) || `Player ${this.players.length + 1}`;
@@ -161,13 +161,41 @@ export class Game {
     const p = {
       id, name, monster: monsterId,
       hp: BASE_HP, maxHp: BASE_HP, vp: 0, energy: 0,
-      cards: [], mimicTarget: null, alive: true, poison: 0, shrink: 0, connected: true, left: false,
+      cards: [], mimicTarget: null, alive: true, poison: 0, shrink: 0, connected: true, left: false, bot,
     };
     this.players.push(p);
-    if (!this.hostId) this.hostId = id;
-    this.log(`${name} joined as ${this.monsterName(p)}.`);
+    if (!this.hostId && !bot) this.hostId = id;
+    this.log(bot ? `🤖 ${name} (computer) joins as ${this.monsterName(p)}.` : `${name} joined as ${this.monsterName(p)}.`);
     this.touch();
     return p;
+  }
+
+  /** Host adds a computer player on the first free monster. Returns the new player. */
+  addBot(byId) {
+    if (this.phase !== 'lobby') throw new GameError('Computer players can only be added before the game starts.');
+    if (byId !== this.hostId) throw new GameError('Only the host can add computer players.');
+    const free = MONSTERS.find(m => !this.players.some(p => p.monster === m.id));
+    if (!free) throw new GameError('Every monster is taken.');
+    const id = 'bot-' + Math.random().toString(36).slice(2, 10);
+    return this.addPlayer(id, `Bot ${free.name}`, free.id, { bot: true });
+  }
+
+  /** Host removes a computer player from the lobby. */
+  removeBot(byId, botId) {
+    if (this.phase !== 'lobby') throw new GameError('Computer players can only be removed before the game starts.');
+    if (byId !== this.hostId) throw new GameError('Only the host can remove computer players.');
+    const p = this.player(botId);
+    if (!p || !p.bot) throw new GameError('No such computer player.');
+    this.removePlayer(botId);
+  }
+
+  /** Who needs to act right now: { playerId, kind } or null. Used to drive computer players. */
+  pendingActor() {
+    if (this.phase !== 'playing') return null;
+    if (this.decisions.length) return { playerId: this.decisions[0].playerId, kind: 'decide' };
+    const t = this.turn;
+    if (t.step === 'yield' && t.pendingYield.length) return { playerId: t.pendingYield[0], kind: 'yield' };
+    return { playerId: t.playerId, kind: t.step };
   }
 
   /** A player leaves. In the lobby they vanish; in a running game they are out. */
@@ -196,7 +224,7 @@ export class Game {
 
   setConnected(id, connected) {
     const p = this.player(id);
-    if (p) p.connected = connected;
+    if (p && !p.bot) p.connected = connected;
   }
 
   /** Host changes game options while in the lobby. */
@@ -1007,7 +1035,7 @@ export class Game {
     g.options = { ...DEFAULT_OPTIONS, ...(d.options || {}) };
     g.bayActive = !!d.bayActive; g.tokyo = { city: null, bay: null, ...(d.tokyo || {}) };
     g.deck = [...(d.deck || [])]; g.discard = [...(d.discard || [])]; g.shop = [...(d.shop || [])];
-    g.players = (d.players || []).map(p => ({ ...p, connected: false }));
+    g.players = (d.players || []).map(p => ({ ...p, connected: !!p.bot }));
     g.turn = d.turn ? JSON.parse(JSON.stringify(d.turn)) : null;
     g.logs = [...(d.logs || [])]; g.seq = d.seq || 0; g.nextDecisionId = d.nextDecisionId || 1;
     g.createdAt = d.createdAt || Date.now(); g.updatedAt = d.updatedAt || Date.now();
