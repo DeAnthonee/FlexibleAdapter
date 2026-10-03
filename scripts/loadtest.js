@@ -25,7 +25,15 @@ function client() {
   c.open = () => new Promise((res, rej) => { ws.once('open', () => res(c)); ws.once('error', rej); });
   c.send = (o) => ws.send(JSON.stringify(o));
   c.next = () => new Promise(r => { if (c.queue.length) r(c.queue.shift()); else c.waiters.push(r); });
-  c.until = async (pred) => { for (let i = 0; i < 200; i++) { if (c.state && pred(c.state)) return c.state; await c.next(); } throw new Error('timeout waiting for state'); };
+  c.until = async (pred, limitMs = 15000) => {
+    const deadline = Date.now() + limitMs;
+    while (Date.now() < deadline) {
+      if (c.state && pred(c.state)) return c.state;
+      const m = await Promise.race([c.next(), new Promise(r => setTimeout(() => r(null), deadline - Date.now()))]);
+      if (m === null) break;
+    }
+    throw new Error('timed out waiting for state');
+  };
   c.act = async (action, pred) => { const t = Date.now(); c.send({ type: 'action', action }); const st = await c.until(pred); c.latencies.push(Date.now() - t); return st; };
   return c;
 }
@@ -41,23 +49,39 @@ async function playGame(i) {
   a.send({ type: 'start' });
   await a.until(s => s.phase === 'playing');
   const me = { [a.joined.playerId]: a, [b.joined.playerId]: b };
+  // Clients receive broadcasts at slightly different moments; always act on the newest state.
+  const latest = () => (a.state && b.state && b.state.seq > a.state.seq) ? b.state : a.state;
+  // Answer every prompt (Wings, Opportunist, yield) until nobody is asked anything.
+  const settle = async () => {
+    for (let i = 0; i < 12; i++) {
+      const s = latest();
+      if (s.phase !== 'playing') return;
+      if (s.decision) {
+        const c = me[s.decision.playerId]; const id = s.decision.id;
+        await c.act({ type: 'decide', answer: false }, x => !x.decision || x.decision.id !== id);
+        continue;
+      }
+      if (s.turn.step === 'yield' && s.turn.pendingYield.length) {
+        const pid = s.turn.pendingYield[0]; const c = me[pid];
+        await c.act({ type: 'yield', yes: Math.random() < 0.5 }, x => x.phase !== 'playing' || !x.turn.pendingYield.includes(pid));
+        continue;
+      }
+      return;
+    }
+  };
   for (let turn = 0; turn < TURNS; turn++) {
-    const st = a.state;
+    const st = latest();
     if (st.phase !== 'playing') break;
     const cur = me[st.turn.playerId];
-    const seqBefore = st.seq;
-    await cur.act({ type: 'roll' }, s => s.turn.rolled && s.seq > seqBefore);
-    await cur.act({ type: 'stopRolling' }, s => s.turn.step !== 'roll' || s.phase !== 'playing');
-    // answer any yield / wings prompts from the other player
-    for (const c of [a, b]) {
-      const s = c.state;
-      if (s.phase !== 'playing') continue;
-      if (s.turn.step === 'yield' && s.turn.pendingYield.includes(c.joined.playerId)) await c.act({ type: 'yield', yes: Math.random() < 0.5 }, x => x.turn.step !== 'yield' || x.phase !== 'playing');
-      if (s.decision && s.decision.playerId === c.joined.playerId) await c.act({ type: 'decide', answer: false }, x => !x.decision || x.decision.id !== s.decision.id);
+    if (st.turn.step === 'roll') {
+      if (!st.turn.rolled) { const seq = st.seq; await cur.act({ type: 'roll' }, s => s.seq > seq && s.turn.rolled); }
+      await cur.act({ type: 'stopRolling' }, s => s.phase !== 'playing' || s.turn.step !== 'roll');
     }
-    if (a.state.phase === 'playing' && a.state.turn.step === 'buy') {
-      const curNow = me[a.state.turn.playerId];
-      await curNow.act({ type: 'endTurn' }, s => s.turn.playerId !== curNow.joined.playerId || s.phase !== 'playing');
+    await settle();
+    const s2 = latest();
+    if (s2.phase === 'playing' && s2.turn.step === 'buy') {
+      const c = me[s2.turn.playerId]; const pid = c.joined.playerId; const seq = s2.seq;
+      await c.act({ type: 'endTurn' }, s => s.phase !== 'playing' || (s.seq > seq && (s.turn.playerId !== pid || !s.turn.rolled)));
     }
   }
   const lat = [...a.latencies, ...b.latencies];

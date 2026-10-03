@@ -38,10 +38,32 @@ The client connects to `ws://` or `wss://` on whatever host and port served the
 page, so no configuration is needed on the client side. A `GET /health`
 endpoint returns `{ ok: true, games: <count> }` for uptime checks.
 
-Game state is kept in memory. Players get a reconnect token stored in their
-browser, so refreshing the page (or a dropped connection) keeps their seat.
-Games are discarded after 6 hours of inactivity, or 10 minutes after everyone
-has left.
+Game state is kept in memory and snapshotted to `DATA_DIR/games.json` after
+every action and on shutdown, so a restart (deploy, crash) brings running games
+back. Players get a reconnect token stored in their browser, so refreshing the
+page, a dropped connection, or a server restart keeps their seat. Games are
+discarded after 6 hours of inactivity, or 10 minutes after everyone has left.
+
+Environment variables:
+
+| Variable    | Default   | Meaning |
+|-------------|-----------|---------|
+| `PORT`      | `3000`    | Listen port; binds all interfaces. |
+| `DATA_DIR`  | `./data`  | Folder for the snapshot file; must be writable. `none` disables persistence. |
+| `MAX_GAMES` | `500`     | Cap on simultaneous games. |
+
+Stop the server with SIGTERM (what launchd, systemd and pm2 send) so the final
+snapshot is written. Each connection is limited to 16 KB messages and a few
+messages per second. Run one process only: state is per process.
+
+`GET /health` returns `{"ok":true,"games":N,"playing":N,"lobby":N,"connections":N,"uptimeSec":N,"version":"…","persistence":true}`.
+A deploy script can postpone a restart while `playing` is above 0.
+
+Load test against a running server (not part of `npm test`):
+
+```bash
+node scripts/loadtest.js ws://localhost:3000 200 4   # 200 two-player games, 4 turns each
+```
 
 ## Project layout
 
@@ -54,6 +76,8 @@ public/app.js        Browser client
 public/style.css     Styling
 public/img/          Monster artwork (640px boards + 160px thumbnails, WebP with alpha)
 test/engine.test.js  Rules tests (node --test)
+test/server.test.js  Server tests: health, restart survival, limits
+scripts/loadtest.js  Many concurrent lobbies against a running server
 ```
 
 ```bash
