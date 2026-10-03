@@ -72,21 +72,27 @@ npm test
   being the last monster standing.
 - Card shop: three face-up cards, buy, sweep for 2 ⚡, Keep vs Discard cards,
   reshuffle when the deck runs out.
-- 57 cards from the base set, including Extra Head, Giant Brain, Nova Breath,
-  Fire Breathing, Poison Spit / Shrink Ray counters, It Has a Child, Jets,
-  Burrowing, Camouflage, Armor Plating, Wings, Herd Culler, Stretchy, Plot
-  Twist, Made in a Lab, Metamorph, Freeze Time, Frenzy, Omnivore, Complete
-  Destruction and all the Discard cards.
-- Reconnection after refresh, and the host can remove a player who dropped.
+- All 61 cards from the base set, including the interactive ones:
+  - **Wings** asks you whether to spend 2 ⚡ each time you would take damage.
+  - **Opportunist** offers you every newly revealed shop card, even on other
+    monsters' turns (clockwise order when several monsters have it).
+  - **Mimic** copies any Keep card another monster has in play; move the
+    counter at the start of your turn or while buying for 1 ⚡. The counter
+    comes back if the copied card leaves play.
+  - **Parasitic Tentacles** lets you buy Keep cards from other monsters
+    during your buy step; they receive the Energy.
+  - **Psychic Probe** lets you force a reroll of one die of the monster
+    whose turn it is, once per turn; a Heart discards the Probe.
+- Reconnection after refresh. Any player can leave a running game (their
+  monster is out, the rest keep playing). The host can end the game for
+  everyone, and can remove a player who dropped offline.
 
-### Simplifications
+### House rulings
 
-- **Wings** triggers automatically whenever you have 2 ⚡ and would take damage.
 - Hearts heal first; any hearts beyond full Life remove Shrink then Poison
   counters.
-- **Mimic**, **Opportunist**, **Parasitic Tentacles** and **Psychic Probe** are
-  not in the deck because they need mid-turn interaction with other players.
 - Discard-card damage still goes through Armor Plating / Camouflage / Wings.
+- Frenzy bought by an Opportunist on someone else's turn has no effect.
 
 ## Licence
 

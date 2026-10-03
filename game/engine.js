@@ -3,23 +3,30 @@
 // A Game instance is driven by `act(playerId, action)` calls. All mutations
 // go through here so the server can simply broadcast `publicState()` after
 // every action.
+//
+// Some effects need an answer from a player in the middle of resolving
+// (Wings: "spend 2 energy to negate this damage?", Opportunist: "buy the card
+// that was just revealed?"). To support that, resolution is broken into a
+// queue of small steps. A step may `ask()` a player a question; the queue
+// pauses until that player answers with a `decide` action, then resumes.
 
 import { CARDS, CARD_BY_ID, cardView } from './cards.js';
 
 export const FACES = ['1', '2', '3', 'heart', 'energy', 'claw'];
 export const MONSTERS = [
-  { id: 'king', name: 'The King', emoji: '🦍', color: '#c98a3a' },
-  { id: 'gigazaur', name: 'Gigazaur', emoji: '🦖', color: '#4caf50' },
-  { id: 'cyber_bunny', name: 'Cyber Bunny', emoji: '🐰', color: '#e91e63' },
-  { id: 'kraken', name: 'Kraken', emoji: '🐙', color: '#3f51b5' },
-  { id: 'alienoid', name: 'Alienoid', emoji: '👽', color: '#8bc34a' },
-  { id: 'meka_dragon', name: 'Meka Dragon', emoji: '🐉', color: '#9c27b0' },
+  { id: 'king', name: 'The King', emoji: '🦍', color: '#d08a3c' },
+  { id: 'gigazaur', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c' },
+  { id: 'cyber_bunny', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2' },
+  { id: 'kraken', name: 'Kraken', emoji: '🐙', color: '#5b7cff' },
+  { id: 'alienoid', name: 'Alienoid', emoji: '👽', color: '#9ad53a' },
+  { id: 'meka_dragon', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff' },
 ];
 
 export const MAX_PLAYERS = 6;
 export const MIN_PLAYERS = 2;
 export const WIN_VP = 20;
 export const BASE_HP = 10;
+const EXTRA_HEADS = ['extra_head_1', 'extra_head_2'];
 
 export class GameError extends Error {}
 
@@ -45,7 +52,13 @@ export class Game {
     this.shop = [];
     this.turn = null;
     this.winner = null;
+    this.endedBy = null;      // 'host' when the host ended the game early
     this.logs = [];
+    this.steps = [];          // queued resolution steps (functions)
+    this.cursor = 0;          // insertion point for newly enqueued steps
+    this.decisions = [];      // pending questions, first one is active
+    this.resumers = new Map();// decision id -> callback(answer)
+    this.nextDecisionId = 1;
     this.createdAt = Date.now();
     this.updatedAt = Date.now();
   }
@@ -61,13 +74,63 @@ export class Game {
   player(id) { return this.players.find(p => p.id === id); }
   alivePlayers() { return this.players.filter(p => p.alive); }
   others(p) { return this.alivePlayers().filter(o => o.id !== p.id); }
-  has(p, cardId) { return p.cards.includes(cardId); }
+  /** Does p have this card's power (owning it, or copying it with Mimic)? */
+  has(p, cardId) {
+    return p.cards.includes(cardId) || (p.mimicTarget === cardId && p.cards.includes('mimic'));
+  }
   inTokyo(p) { return this.tokyo.city === p.id || this.tokyo.bay === p.id; }
   tokyoOccupants() {
     return [this.tokyo.city, this.tokyo.bay].filter(Boolean).map(id => this.player(id)).filter(p => p && p.alive);
   }
   currentPlayer() { return this.turn ? this.player(this.turn.playerId) : null; }
   roll() { return FACES[Math.floor(this.rng() * 6)]; }
+  monsterName(p) { return MONSTERS.find(m => m.id === p.monster).name; }
+
+  /** Players in clockwise order starting after `from`. */
+  clockwiseFrom(from) {
+    const i = this.players.findIndex(x => x.id === from.id);
+    const out = [];
+    for (let k = 1; k < this.players.length; k++) out.push(this.players[(i + k) % this.players.length]);
+    return out;
+  }
+
+  // ----------------------------------------------------- step queue
+  enqueue(...fns) {
+    this.steps.splice(this.cursor, 0, ...fns);
+    this.cursor += fns.length;
+  }
+
+  drain() {
+    while (this.decisions.length === 0 && this.steps.length) {
+      const f = this.steps.shift();
+      this.cursor = 0;
+      f();
+    }
+    if (this.decisions.length === 0) this.cursor = 0;
+  }
+
+  /** Ask `p` a question. `resume(answer)` runs when they answer. */
+  ask(p, kind, data, resume) {
+    if (!p.connected || !p.alive) { resume(undefined); return; } // nobody there to answer: take the default
+    const id = this.nextDecisionId++;
+    this.decisions.push({ id, kind, playerId: p.id, data });
+    this.resumers.set(id, resume);
+  }
+
+  resolveDecision(id, answer) {
+    const idx = this.decisions.findIndex(d => d.id === id);
+    if (idx === -1) return;
+    this.decisions.splice(idx, 1);
+    const resume = this.resumers.get(id);
+    this.resumers.delete(id);
+    this.cursor = 0;
+    if (resume) resume(answer);
+  }
+
+  /** Answer (with the default) every pending question addressed to `p`. */
+  dropDecisionsFor(p) {
+    for (const d of this.decisions.filter(d => d.playerId === p.id)) this.resolveDecision(d.id, undefined);
+  }
 
   // -------------------------------------------------------------- lobby
   addPlayer(id, name, monsterId) {
@@ -79,15 +142,16 @@ export class Game {
     const p = {
       id, name, monster: monsterId,
       hp: BASE_HP, maxHp: BASE_HP, vp: 0, energy: 0,
-      cards: [], alive: true, poison: 0, shrink: 0, connected: true,
+      cards: [], mimicTarget: null, alive: true, poison: 0, shrink: 0, connected: true, left: false,
     };
     this.players.push(p);
     if (!this.hostId) this.hostId = id;
-    this.log(`${name} joined as ${MONSTERS.find(m => m.id === monsterId).name}.`);
+    this.log(`${name} joined as ${this.monsterName(p)}.`);
     this.touch();
     return p;
   }
 
+  /** A player leaves. In the lobby they vanish; in a running game they are out. */
   removePlayer(id) {
     const p = this.player(id);
     if (!p) return;
@@ -97,8 +161,17 @@ export class Game {
       if (this.hostId === id) this.hostId = this.players[0]?.id || null;
     } else {
       p.connected = false;
+      p.left = true;
+      if (this.phase === 'playing' && p.alive) this.removeFromPlay(p, `${p.name} left the game.`);
+      if (this.hostId === id) this.transferHost();
     }
     this.touch();
+  }
+
+  transferHost() {
+    const next = this.players.find(p => p.connected && !p.left && p.id !== this.hostId)
+      || this.players.find(p => !p.left && p.id !== this.hostId);
+    if (next) { this.hostId = next.id; this.log(`${next.name} is now the host.`); }
   }
 
   setConnected(id, connected) {
@@ -116,7 +189,6 @@ export class Game {
     this.shop = [];
     this.refillShop();
     shuffle(this.players, this.rng);
-    // Everyone rolls once; most claws goes first (ties broken by shuffle order).
     let best = -1, first = 0;
     this.players.forEach((p, i) => {
       let claws = 0;
@@ -129,21 +201,38 @@ export class Game {
     this.touch();
   }
 
+  /** Host ends the game early for everyone. */
+  endGame(byId) {
+    if (byId !== this.hostId) throw new GameError('Only the host can end the game.');
+    if (this.phase === 'ended') return;
+    this.phase = 'ended';
+    this.endedBy = 'host';
+    this.winner = null;
+    this.steps = []; this.decisions = []; this.resumers.clear();
+    const host = this.player(byId);
+    this.log(`${host ? host.name : 'The host'} ended the game.`);
+    this.touch();
+  }
+
   refillShop() {
+    const revealed = [];
     while (this.shop.length < 3) {
       if (this.deck.length === 0) {
         if (this.discard.length === 0) break;
         this.deck = shuffle(this.discard.splice(0), this.rng);
         this.log('The deck is reshuffled.');
       }
-      this.shop.push(this.deck.pop());
+      const id = this.deck.pop();
+      this.shop.push(id);
+      revealed.push(id);
     }
+    if (revealed.length && this.phase === 'playing' && this.turn) this.offerOpportunists(revealed);
   }
 
   // ------------------------------------------------------------- turns
   startTurn(playerId, { diceAdjust = 0 } = {}) {
     const p = this.player(playerId);
-    const extraDice = p.cards.filter(c => c.startsWith('extra_head')).length;
+    const extraDice = EXTRA_HEADS.filter(id => this.has(p, id)).length;
     this.turn = {
       playerId,
       step: 'roll',            // roll | yield | buy
@@ -158,6 +247,7 @@ export class Game {
       extraTurn: false,
       freezeTime: false,
       usedHerdCuller: false,
+      probed: [],              // ids of players who used Psychic Probe this turn
       labCard: null,
     };
     this.log(`— ${p.name}'s turn —`);
@@ -172,29 +262,34 @@ export class Game {
   endTurn() {
     const p = this.currentPlayer();
     const t = this.turn;
-    if (p.alive) {
-      if (this.has(p, 'herbivore') && !t.dealtDamage) this.gainVp(p, 1, '(Herbivore)');
-      if (this.has(p, 'energy_hoarder') && p.energy >= 6) this.gainVp(p, Math.floor(p.energy / 6), '(Energy Hoarder)');
-      if (this.has(p, 'solar_powered') && p.energy === 0) this.gainEnergy(p, 1, '(Solar Powered)');
-      if (this.has(p, 'rooting_for_the_underdog') && this.others(p).every(o => o.vp > p.vp)) this.gainVp(p, 1, '(Rooting for the Underdog)');
-      if (p.poison > 0) {
-        this.log(`${p.name} suffers ${p.poison} Poison damage.`);
-        this.damage(p, p.poison, { attack: false, source: null });
-      }
-    }
-    if (this.checkWin()) return;
-    const extra = t.extraTurn && p.alive;
-    const freeze = t.freezeTime && p.alive;
-    if (extra || freeze) {
-      this.log(`${p.name} takes another turn${freeze ? ' with one less die (Freeze Time)' : ''}.`);
-      this.startTurn(p.id, { diceAdjust: freeze && !extra ? -1 : 0 });
-      return;
-    }
-    const idx = this.players.findIndex(x => x.id === p.id);
-    for (let i = 1; i <= this.players.length; i++) {
-      const next = this.players[(idx + i) % this.players.length];
-      if (next.alive) { this.startTurn(next.id); return; }
-    }
+    this.enqueue(
+      () => {
+        if (!p.alive) return;
+        if (this.has(p, 'herbivore') && !t.dealtDamage) this.gainVp(p, 1, '(Herbivore)');
+        if (this.has(p, 'energy_hoarder') && p.energy >= 6) this.gainVp(p, Math.floor(p.energy / 6), '(Energy Hoarder)');
+        if (this.has(p, 'solar_powered') && p.energy === 0) this.gainEnergy(p, 1, '(Solar Powered)');
+        if (this.has(p, 'rooting_for_the_underdog') && this.others(p).every(o => o.vp > p.vp)) this.gainVp(p, 1, '(Rooting for the Underdog)');
+        if (p.poison > 0) {
+          this.log(`${p.name} suffers ${p.poison} Poison damage.`);
+          this.damage(p, p.poison, { attack: false, source: null });
+        }
+      },
+      () => {
+        if (this.checkWin()) return;
+        const extra = t.extraTurn && p.alive;
+        const freeze = t.freezeTime && p.alive;
+        if (extra || freeze) {
+          this.log(`${p.name} takes another turn${freeze && !extra ? ' with one less die (Freeze Time)' : ''}.`);
+          this.startTurn(p.id, { diceAdjust: freeze && !extra ? -1 : 0 });
+          return;
+        }
+        const idx = this.players.findIndex(x => x.id === p.id);
+        for (let i = 1; i <= this.players.length; i++) {
+          const next = this.players[(idx + i) % this.players.length];
+          if (next.alive) { this.startTurn(next.id); return; }
+        }
+      },
+    );
   }
 
   checkWin() {
@@ -202,8 +297,7 @@ export class Game {
     const alive = this.alivePlayers();
     let winner = null;
     if (alive.length === 1) winner = alive[0];
-    else if (alive.length === 0) winner = null;
-    else {
+    else if (alive.length > 1) {
       const cur = this.currentPlayer();
       const twenty = alive.filter(p => p.vp >= WIN_VP);
       if (twenty.length) winner = twenty.includes(cur) ? cur : twenty.sort((a, b) => b.vp - a.vp)[0];
@@ -211,9 +305,15 @@ export class Game {
     if (alive.length <= 1 || winner) {
       this.phase = 'ended';
       this.winner = winner ? winner.id : null;
+      this.steps = []; this.decisions = []; this.resumers.clear();
       this.log(winner ? `🏆 ${winner.name} is the King of Tokyo!` : 'All monsters have been destroyed. Nobody wins!');
       return true;
     }
+    return false;
+  }
+
+  checkWinLastStanding() {
+    if (this.alivePlayers().length <= 1) return this.checkWin();
     return false;
   }
 
@@ -242,8 +342,8 @@ export class Game {
     this.log(`${p.name} loses ${lost} ⚡.`);
   }
   heal(p, n, { card = false } = {}) {
-    if (n <= 0 || !p.alive) return;
-    if (this.inTokyo(p) && !card) { this.log(`${p.name} cannot heal in Tokyo.`); return; }
+    if (n <= 0 || !p.alive) return 0;
+    if (this.inTokyo(p) && !card) { this.log(`${p.name} cannot heal in Tokyo.`); return 0; }
     if (this.has(p, 'regeneration')) n += 1;
     const healed = Math.min(n, p.maxHp - p.hp);
     if (healed > 0) {
@@ -253,24 +353,41 @@ export class Game {
     return healed;
   }
 
-  /** Apply damage to p. Returns the damage actually taken. */
-  damage(p, n, { source = null, attack = true } = {}) {
-    if (n <= 0 || !p.alive) return 0;
+  /**
+   * Deal damage to p. Because Wings may ask p a question, the result is
+   * delivered through `after(taken)` (called synchronously when no question
+   * is needed). Callers that enqueue follow-up steps should do so from
+   * `after`, or enqueue them after calling damage().
+   */
+  damage(p, n, { source = null, attack = true } = {}, after = () => {}) {
+    if (n <= 0 || !p.alive) return after(0);
     if (this.has(p, 'armor_plating') && n === 1) {
       this.log(`${p.name}'s Armor Plating ignores 1 damage.`);
-      return 0;
+      return after(0);
     }
     if (this.has(p, 'camouflage')) {
       let saved = 0;
       for (let i = 0; i < n; i++) if (this.roll() === 'heart') saved++;
       if (saved) { n -= saved; this.log(`${p.name}'s Camouflage cancels ${saved} damage.`); }
-      if (n <= 0) return 0;
+      if (n <= 0) return after(0);
     }
     if (this.has(p, 'wings') && p.energy >= 2) {
-      p.energy -= 2;
-      this.log(`${p.name} spends 2 ⚡ on Wings and takes no damage.`);
-      return 0;
+      const amount = n;
+      this.ask(p, 'wings', { amount, from: source ? source.name : null }, (use) => {
+        if (use) {
+          p.energy -= 2;
+          this.log(`${p.name} spends 2 ⚡ on Wings and takes no damage.`);
+          after(0);
+        } else {
+          after(this.applyDamage(p, amount, source));
+        }
+      });
+      return;
     }
+    return after(this.applyDamage(p, n, source));
+  }
+
+  applyDamage(p, n, source) {
     p.hp = Math.max(0, p.hp - n);
     this.log(`${p.name} takes ${n} damage (${p.hp} ♥ left).`);
     if (source && source.id !== p.id) {
@@ -282,25 +399,100 @@ export class Game {
     return n;
   }
 
+  /** Damage several targets one after another (each may pause for Wings). */
+  damageAll(entries, opts, afterAll = () => {}) {
+    const taken = {};
+    this.enqueue(
+      ...entries.map(e => () => this.damage(e.p, e.n, opts, (d) => { taken[e.p.id] = d; })),
+      () => afterAll(taken),
+    );
+  }
+
   eliminate(p) {
     this.alivePlayers().filter(o => o.id !== p.id && this.has(o, 'eater_of_the_dead'))
       .forEach(o => this.gainVp(o, 3, '(Eater of the Dead)'));
     this.leaveTokyo(p);
     if (this.has(p, 'it_has_a_child')) {
       this.log(`${p.name} is destroyed... but It Has a Child! ${p.name} starts over.`);
-      p.cards.forEach(id => this.discard.push(id));
-      p.cards = [];
+      for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
+      p.mimicTarget = null;
       p.vp = 0; p.energy = 0; p.hp = BASE_HP; p.maxHp = BASE_HP; p.poison = 0; p.shrink = 0;
       return;
     }
     p.alive = false;
     p.hp = 0;
     this.log(`💀 ${p.name} has been eliminated!`);
+    for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
+    p.mimicTarget = null;
+    this.closeBayIfNeeded();
+  }
+
+  closeBayIfNeeded() {
     if (this.bayActive && this.alivePlayers().length < 5) {
       this.bayActive = false;
       const bayP = this.tokyo.bay ? this.player(this.tokyo.bay) : null;
       this.tokyo.bay = null;
       this.log(`Tokyo Bay closes.${bayP ? ` ${bayP.name} leaves Tokyo.` : ''}`);
+    }
+  }
+
+  /** A player is out of the game (eliminated by the host, or left). */
+  removeFromPlay(p, why) {
+    this.log(why);
+    this.leaveTokyo(p);
+    p.alive = false; p.hp = 0;
+    for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
+    p.mimicTarget = null;
+    this.dropDecisionsFor(p);
+    this.closeBayIfNeeded();
+    const t = this.turn;
+    if (t && t.pendingYield.includes(p.id)) t.pendingYield = t.pendingYield.filter(id => id !== p.id);
+    if (this.checkWin()) return;
+    if (t.playerId === p.id) {
+      t.pendingYield = [];
+      this.endTurn();
+    } else if (t.step === 'yield' && t.pendingYield.length === 0) {
+      this.enqueue(() => this.finishAttack(this.currentPlayer()));
+    }
+    this.drain();
+  }
+
+  // ------------------------------------------------------------- cards
+  /** Remove a card from p's play area (sold, used up, discarded). */
+  loseCard(p, cardId) {
+    if (p.cards.includes(cardId)) {
+      p.cards = p.cards.filter(c => c !== cardId);
+      this.discard.push(cardId);
+      if (cardId === 'even_bigger') { p.maxHp -= 2; p.hp = Math.min(p.hp, p.maxHp); }
+      if (cardId === 'mimic') this.setMimicTarget(p, null);
+      this.cardLeftPlay(cardId);
+    } else if (p.mimicTarget === cardId) {
+      this.setMimicTarget(p, null);
+    }
+  }
+
+  /** The copied card left play: every Mimic pointing at it takes its counter back. */
+  cardLeftPlay(cardId) {
+    for (const o of this.players) {
+      if (o.mimicTarget === cardId) {
+        this.setMimicTarget(o, null);
+        this.log(`${o.name}'s Mimic counter returns (${CARD_BY_ID[cardId].name} left play).`);
+      }
+    }
+  }
+
+  setMimicTarget(p, cardId) {
+    if (p.mimicTarget === 'even_bigger' && cardId !== 'even_bigger') { p.maxHp -= 2; p.hp = Math.min(p.hp, p.maxHp); }
+    if (cardId === 'even_bigger' && p.mimicTarget !== 'even_bigger') { p.maxHp += 2; p.hp += 2; }
+    p.mimicTarget = cardId;
+  }
+
+  /** Give a Keep card to p (bought, or taken with Parasitic Tentacles). */
+  giveKeepCard(p, cardId) {
+    p.cards.push(cardId);
+    if (cardId === 'even_bigger') { p.maxHp += 2; p.hp += 2; this.log(`${p.name} grows to ${p.hp}/${p.maxHp} ♥.`); }
+    if (cardId === 'made_in_a_lab' && this.turn && this.turn.playerId === p.id && this.deck.length) {
+      this.turn.labCard = this.deck[this.deck.length - 1];
     }
   }
 
@@ -339,26 +531,46 @@ export class Game {
     if (!p) throw new GameError('You are not in this game.');
     const t = this.turn;
     const type = action && action.type;
+    this.cursor = 0;
+
+    // Always allowed.
+    if (type === 'endGame') { this.endGame(playerId); return; }
+    if (type === 'kick') { this.actKick(p, action.targetId); return; }
+
+    // While a question is pending, only its addressee may act (by answering).
+    if (this.decisions.length) {
+      const d = this.decisions[0];
+      if (type === 'decide' && d.playerId === playerId) {
+        this.resolveDecision(d.id, action.answer);
+        this.drain();
+        return;
+      }
+      throw new GameError(`Waiting for ${this.player(d.playerId).name} to decide.`);
+    }
+    if (type === 'decide') throw new GameError('Nothing to decide right now.');
 
     // Actions available to non-current players.
-    if (type === 'yield') return this.actYield(p, !!action.yes);
-    if (type === 'kick') return this.actKick(p, action.targetId);
+    if (type === 'yield') { this.actYield(p, !!action.yes); this.drain(); return; }
+    if (type === 'probe') { this.actProbe(p, action.index); this.drain(); return; }
 
     if (t.playerId !== playerId) throw new GameError("It's not your turn.");
     if (!p.alive) throw new GameError('You have been eliminated.');
 
     switch (type) {
-      case 'roll': return this.actRoll(p, action.keep || []);
-      case 'stopRolling': return this.actStopRolling(p);
-      case 'setDie': return this.actSetDie(p, action.index, action.face, action.via);
-      case 'rapidHeal': return this.actRapidHeal(p);
-      case 'buy': return this.actBuy(p, action.index);
-      case 'buyLab': return this.actBuyLab(p);
-      case 'sweep': return this.actSweep(p);
-      case 'sell': return this.actSell(p, action.cardId);
-      case 'endTurn': return this.actEndTurn(p);
+      case 'roll': this.actRoll(p, action.keep || []); break;
+      case 'stopRolling': this.actStopRolling(p); break;
+      case 'setDie': this.actSetDie(p, action.index, action.face, action.via); break;
+      case 'rapidHeal': this.actRapidHeal(p); break;
+      case 'mimic': this.actMimic(p, action.cardId); break;
+      case 'buy': this.actBuy(p, action.index); break;
+      case 'buyLab': this.actBuyLab(p); break;
+      case 'buyFrom': this.actBuyFrom(p, action.playerId, action.cardId); break;
+      case 'sweep': this.actSweep(p); break;
+      case 'sell': this.actSell(p, action.cardId); break;
+      case 'endTurn': this.actEndTurn(p); break;
       default: throw new GameError(`Unknown action: ${type}`);
     }
+    this.drain();
   }
 
   actRoll(p, keep) {
@@ -407,12 +619,31 @@ export class Game {
       p.energy -= 2;
     } else if (via === 'plot_twist') {
       if (!this.has(p, 'plot_twist')) throw new GameError('You do not have Plot Twist.');
-      p.cards = p.cards.filter(c => c !== 'plot_twist');
-      this.discard.push('plot_twist');
+      this.loseCard(p, 'plot_twist');
     } else throw new GameError('Unknown die-changing card.');
     t.dice[index].face = face;
     t.dice[index].kept = true;
     this.log(`${p.name} changes a die to ${face} (${CARD_BY_ID[via].name}).`);
+  }
+
+  /** Psychic Probe: another player forces one of the current player's dice to be rerolled. */
+  actProbe(p, index) {
+    const t = this.turn;
+    if (!p.alive) throw new GameError('You have been eliminated.');
+    if (t.playerId === p.id) throw new GameError('Psychic Probe works on other monsters\' dice.');
+    if (!this.has(p, 'psychic_probe')) throw new GameError('You do not have Psychic Probe.');
+    if (t.step !== 'roll' || !t.rolled) throw new GameError('There are no dice to probe right now.');
+    if (t.probed.includes(p.id)) throw new GameError('You already used Psychic Probe this turn.');
+    if (!(index >= 0 && index < t.dice.length)) throw new GameError('Bad die index.');
+    const cur = this.currentPlayer();
+    const before = t.dice[index].face;
+    t.dice[index].face = this.roll();
+    t.probed.push(p.id);
+    this.log(`${p.name} uses Psychic Probe: ${cur.name}'s ${before} becomes ${t.dice[index].face}.`);
+    if (t.dice[index].face === 'heart') {
+      this.log(`${p.name}'s Psychic Probe rolled a ♥ and is discarded.`);
+      this.loseCard(p, 'psychic_probe');
+    }
   }
 
   actRapidHeal(p) {
@@ -421,6 +652,23 @@ export class Game {
     if (p.hp >= p.maxHp) throw new GameError('You are already at full Life.');
     p.energy -= 2;
     this.heal(p, 1, { card: true });
+  }
+
+  /** Mimic: copy a Keep card another monster has in play. */
+  actMimic(p, cardId) {
+    const t = this.turn;
+    if (!p.cards.includes('mimic')) throw new GameError('You do not have Mimic.');
+    if (!((t.step === 'roll' && !t.rolled) || t.step === 'buy')) throw new GameError('Mimic can be moved at the start of your turn or while buying cards.');
+    const owner = this.players.find(o => o.alive && o.id !== p.id && o.cards.includes(cardId));
+    if (!owner || cardId === 'mimic') throw new GameError('Choose a Keep card another monster has in play.');
+    if (CARD_BY_ID[cardId].type !== 'keep') throw new GameError('Mimic can only copy Keep cards.');
+    if (p.mimicTarget === cardId) throw new GameError('Mimic is already copying that card.');
+    if (p.mimicTarget) {
+      if (p.energy < 1) throw new GameError('Moving the Mimic counter costs 1 Energy.');
+      p.energy -= 1;
+    }
+    this.setMimicTarget(p, cardId);
+    this.log(`${p.name}'s Mimic now copies ${owner.name}'s ${CARD_BY_ID[cardId].name}.`);
   }
 
   actStopRolling(p) {
@@ -435,7 +683,6 @@ export class Game {
     const count = Object.fromEntries(FACES.map(f => [f, 0]));
     t.dice.forEach(d => count[d.face]++);
 
-    // Victory points from numbers
     if (this.has(p, 'omnivore') && count['1'] && count['2'] && count['3']) this.gainVp(p, 2, '(Omnivore)');
     if (this.has(p, 'complete_destruction') && FACES.every(f => count[f] > 0)) this.gainVp(p, 9, '(Complete Destruction)');
     let bonusDamage = 0;
@@ -447,9 +694,7 @@ export class Game {
         if (n === '2' && this.has(p, 'poison_quills')) bonusDamage += 2;
       }
     }
-    // Energy
     if (count.energy) this.gainEnergy(p, count.energy);
-    // Hearts: heal first, leftover hearts strip counters.
     if (count.heart) {
       let hearts = count.heart;
       if (!this.inTokyo(p)) {
@@ -463,10 +708,7 @@ export class Game {
         hearts--;
       }
     }
-    // Attack
     this.resolveAttack(p, count.claw, bonusDamage);
-    if (this.phase === 'ended') return;
-    if (t.pendingYield.length === 0) this.finishAttack(p);
   }
 
   resolveAttack(p, claws, bonusDamage) {
@@ -483,7 +725,7 @@ export class Game {
       if (this.has(p, 'urbavore')) dmg += 1;
       if (this.has(p, 'burrowing')) dmg += 1;
     }
-    if (dmg <= 0) return;
+    if (dmg <= 0) { this.enqueue(() => this.finishAttack(p)); return; }
 
     let targets;
     if (this.has(p, 'nova_breath')) targets = this.others(p);
@@ -493,36 +735,34 @@ export class Game {
     const fire = this.has(p, 'fire_breathing') ? this.neighbors(p) : [];
     if (targets.length === 0 && fire.length === 0) {
       this.log(`${p.name} attacks but nobody is there to hit.`);
+      this.enqueue(() => this.finishAttack(p));
       return;
     }
     this.log(`${p.name} attacks for ${dmg} damage!`);
     t.dealtDamage = true;
     const wasInTokyo = targets.filter(o => this.inTokyo(o)).map(o => o.id);
-    for (const o of targets) {
-      const extra = fire.includes(o) ? 1 : 0;
-      const taken = this.damage(o, dmg + extra, { source: p, attack: attacking });
-      if (wasInTokyo.includes(o.id)) t.yieldDamage[o.id] = taken;
-    }
-    for (const o of fire) {
-      if (!targets.includes(o) && o.alive) {
-        this.log(`${o.name} is scorched by Fire Breathing.`);
-        this.damage(o, 1, { source: p, attack: false });
-      }
-    }
-    if (this.phase === 'ended' || this.checkWinLastStanding()) return;
-    if (attacking && !this.inTokyo(p)) {
-      const yielders = wasInTokyo.map(id => this.player(id)).filter(o => o.alive && this.inTokyo(o) && t.yieldDamage[o.id] > 0);
-      if (yielders.length) {
-        t.pendingYield = yielders.map(o => o.id);
-        t.step = 'yield';
-        this.log(`${yielders.map(o => o.name).join(' and ')} must decide whether to yield Tokyo.`);
-      }
-    }
-  }
+    const scorched = fire.filter(o => !targets.includes(o));
 
-  checkWinLastStanding() {
-    if (this.alivePlayers().length <= 1) return this.checkWin();
-    return false;
+    this.damageAll(targets.map(o => ({ p: o, n: dmg + (fire.includes(o) ? 1 : 0) })), { source: p, attack: attacking }, (taken) => {
+      for (const id of wasInTokyo) t.yieldDamage[id] = taken[id] || 0;
+    });
+    if (scorched.length) {
+      this.enqueue(() => this.log(`${scorched.map(o => o.name).join(' and ')} ${scorched.length > 1 ? 'are' : 'is'} scorched by Fire Breathing.`));
+      this.damageAll(scorched.map(o => ({ p: o, n: 1 })), { source: p, attack: false });
+    }
+    this.enqueue(() => {
+      if (this.phase === 'ended' || this.checkWinLastStanding()) return;
+      if (attacking && !this.inTokyo(p)) {
+        const yielders = wasInTokyo.map(id => this.player(id)).filter(o => o.alive && this.inTokyo(o) && t.yieldDamage[o.id] > 0);
+        if (yielders.length) {
+          t.pendingYield = yielders.map(o => o.id);
+          t.step = 'yield';
+          this.log(`${yielders.map(o => o.name).join(' and ')} must decide whether to yield Tokyo.`);
+          return;
+        }
+      }
+      this.finishAttack(p);
+    });
   }
 
   neighbors(p) {
@@ -547,22 +787,23 @@ export class Game {
         p.hp = Math.min(p.maxHp, p.hp + t.yieldDamage[p.id]);
         this.log(`${p.name}'s Jets cancel the damage taken (${p.hp} ♥).`);
       }
+      this.leaveTokyo(p);
       if (this.has(p, 'burrowing')) {
         this.log(`${p.name}'s Burrowing bites back.`);
-        this.damage(attacker, 1, { source: p, attack: false });
+        this.enqueue(() => this.damage(attacker, 1, { source: p, attack: false }));
       }
-      this.leaveTokyo(p);
     } else {
       this.log(`${p.name} stays in Tokyo.`);
     }
-    if (t.pendingYield.length === 0 && this.phase === 'playing') this.finishAttack(attacker);
+    this.enqueue(() => {
+      if (t.pendingYield.length === 0 && this.phase === 'playing') this.finishAttack(attacker);
+    });
   }
 
   /** After damage and yield decisions: place the attacker, then move to buying. */
   finishAttack(p) {
     const t = this.turn;
     if (p.alive && t.attacked && !this.inTokyo(p) && this.hasFreeTokyoSpot()) this.enterTokyo(p);
-    // Bay occupant moves up to City if City emptied? No: rules keep them where they are.
     if (this.checkWinLastStanding()) return;
     if (!p.alive) { this.endTurn(); return; }
     t.step = 'buy';
@@ -590,23 +831,66 @@ export class Game {
     this.purchase(p, card, () => { this.deck.pop(); t.labCard = this.deck.length ? this.deck[this.deck.length - 1] : null; });
   }
 
+  /** Parasitic Tentacles: buy a Keep card from another monster, paying them. */
+  actBuyFrom(p, ownerId, cardId) {
+    const t = this.turn;
+    if (t.step !== 'buy') throw new GameError('You can only buy cards after resolving your dice.');
+    if (!this.has(p, 'parasitic_tentacles')) throw new GameError('You do not have Parasitic Tentacles.');
+    const owner = this.player(ownerId);
+    if (!owner || !owner.alive || owner.id === p.id || !owner.cards.includes(cardId)) throw new GameError('That monster does not have that card.');
+    const card = CARD_BY_ID[cardId];
+    if (card.type !== 'keep') throw new GameError('Only Keep cards can be bought.');
+    const cost = this.cardCost(p, card);
+    if (p.energy < cost) throw new GameError(`${card.name} costs ${cost} Energy; you have ${p.energy}.`);
+    p.energy -= cost;
+    owner.energy += cost;
+    owner.cards = owner.cards.filter(c => c !== cardId);
+    if (cardId === 'even_bigger') { owner.maxHp -= 2; owner.hp = Math.min(owner.hp, owner.maxHp); }
+    if (cardId === 'mimic') this.setMimicTarget(owner, null);
+    if (owner.mimicTarget && !owner.cards.includes('mimic')) owner.mimicTarget = null;
+    this.giveKeepCard(p, cardId);
+    this.log(`${p.name} buys ${card.name} from ${owner.name} for ${cost} ⚡ (Parasitic Tentacles).`);
+    if (this.has(p, 'dedicated_news_team')) this.gainVp(p, 1, '(Dedicated News Team)');
+  }
+
   purchase(p, card, remove) {
     const cost = this.cardCost(p, card);
     if (p.energy < cost) throw new GameError(`${card.name} costs ${cost} Energy; you have ${p.energy}.`);
     p.energy -= cost;
-    remove();
     this.log(`${p.name} buys ${card.name} for ${cost} ⚡.`);
     if (this.has(p, 'dedicated_news_team')) this.gainVp(p, 1, '(Dedicated News Team)');
     if (card.type === 'keep') {
-      p.cards.push(card.id);
-      if (card.id === 'even_bigger') { p.maxHp += 2; p.hp += 2; this.log(`${p.name} grows to ${p.hp}/${p.maxHp} ♥.`); }
-      if (card.id === 'made_in_a_lab' && this.deck.length) this.turn.labCard = this.deck[this.deck.length - 1];
+      remove();
+      this.giveKeepCard(p, card.id);
     } else {
       card.effect(this, p);
       this.discard.push(card.id);
+      remove();
     }
-    if (this.checkWinLastStanding()) return;
-    if (!p.alive) this.endTurn();
+    this.enqueue(() => {
+      if (this.checkWinLastStanding()) return;
+      if (!p.alive && this.turn.playerId === p.id) this.endTurn();
+    });
+  }
+
+  /** Opportunist: offer freshly revealed cards to each Opportunist, clockwise from the current player. */
+  offerOpportunists(cardIds) {
+    const cur = this.currentPlayer();
+    const opportunists = this.clockwiseFrom(cur).filter(o => o.alive && this.has(o, 'opportunist'));
+    for (const o of opportunists) {
+      this.enqueue(() => {
+        const available = cardIds.filter(id => this.shop.includes(id));
+        if (!available.length) return;
+        this.ask(o, 'opportunist', { cards: available.map(cardView) }, (answer) => {
+          const pick = answer && answer.buy;
+          if (!pick || !this.shop.includes(pick)) { this.log(`${o.name} passes (Opportunist).`); return; }
+          const card = CARD_BY_ID[pick];
+          if (o.energy < this.cardCost(o, card)) { this.log(`${o.name} cannot afford ${card.name}.`); return; }
+          this.log(`${o.name} jumps on ${card.name} (Opportunist).`);
+          this.purchase(o, card, () => { this.shop.splice(this.shop.indexOf(pick), 1); this.refillShop(); });
+        });
+      });
+    }
   }
 
   actSweep(p) {
@@ -614,18 +898,16 @@ export class Game {
     if (p.energy < 2) throw new GameError('Sweeping costs 2 Energy.');
     p.energy -= 2;
     this.discard.push(...this.shop.splice(0));
-    this.refillShop();
     this.log(`${p.name} pays 2 ⚡ to sweep the shop.`);
+    this.refillShop();
   }
 
   actSell(p, cardId) {
     if (this.turn.step !== 'buy') throw new GameError('You can only sell cards during the buy step.');
     if (!this.has(p, 'metamorph')) throw new GameError('You do not have Metamorph.');
-    if (!this.has(p, cardId)) throw new GameError('You do not own that card.');
+    if (!p.cards.includes(cardId)) throw new GameError('You do not own that card.');
     const card = CARD_BY_ID[cardId];
-    p.cards = p.cards.filter(c => c !== cardId);
-    this.discard.push(cardId);
-    if (cardId === 'even_bigger') { p.maxHp -= 2; p.hp = Math.min(p.hp, p.maxHp); }
+    this.loseCard(p, cardId);
     p.energy += card.cost;
     this.log(`${p.name} sells ${card.name} for ${card.cost} ⚡ (Metamorph).`);
   }
@@ -633,7 +915,7 @@ export class Game {
   actEndTurn(p) {
     const t = this.turn;
     if (t.step === 'roll' && !t.rolled) throw new GameError('Roll the dice first.');
-    if (t.step === 'roll') { this.resolveDice(p); if (this.phase !== 'playing' || t.step !== 'buy') return; }
+    if (t.step === 'roll') { this.resolveDice(p); this.enqueue(() => { if (this.phase === 'playing' && t.step === 'buy') this.endTurn(); }); return; }
     if (t.step !== 'buy') throw new GameError('Waiting on other players.');
     this.endTurn();
   }
@@ -644,19 +926,8 @@ export class Game {
     const target = this.player(targetId);
     if (!target || !target.alive) throw new GameError('No such player.');
     if (target.connected) throw new GameError('You can only remove disconnected players.');
-    this.log(`${target.name} is removed from the game by the host.`);
-    this.leaveTokyo(target);
-    target.alive = false; target.hp = 0;
-    if (this.turn.pendingYield.includes(targetId)) {
-      this.turn.pendingYield = this.turn.pendingYield.filter(id => id !== targetId);
-      if (this.turn.pendingYield.length === 0) this.finishAttack(this.currentPlayer());
-    }
-    if (this.bayActive && this.alivePlayers().length < 5) {
-      this.bayActive = false;
-      this.tokyo.bay = null;
-    }
-    if (this.checkWin()) return;
-    if (this.turn.playerId === targetId) this.endTurn();
+    target.left = true;
+    this.removeFromPlay(target, `${target.name} is removed from the game by the host.`);
   }
 
   // ------------------------------------------------------------- state
@@ -666,13 +937,15 @@ export class Game {
       phase: this.phase,
       hostId: this.hostId,
       winner: this.winner,
+      endedBy: this.endedBy,
       bayActive: this.bayActive,
       tokyo: { ...this.tokyo },
       deckSize: this.deck.length,
       shop: this.shop.map(cardView),
-      players: this.players.map(p => ({ ...p, cards: p.cards.map(cardView) })),
+      players: this.players.map(p => ({ ...p, cards: p.cards.map(cardView), mimicTarget: p.mimicTarget ? cardView(p.mimicTarget) : null })),
       turn: this.turn ? { ...this.turn, labCard: this.turn.labCard ? cardView(this.turn.labCard) : null } : null,
-      logs: this.logs.slice(-60),
+      decision: this.decisions.length ? this.decisions[0] : null,
+      logs: this.logs.slice(-80),
       monsters: MONSTERS,
     };
   }

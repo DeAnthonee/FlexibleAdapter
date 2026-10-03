@@ -253,3 +253,183 @@ test('all card ids are unique and every discard card has an effect', async () =>
   for (const c of CARDS) if (c.type === 'discard') assert.equal(typeof c.effect, 'function', c.id);
   assert.ok(FACES.length === 6);
 });
+
+// ------------------------------------------------------------ new cards & flows
+
+test('Wings: the defender is asked before taking damage and may negate it for 2 energy', () => {
+  const g = makeGame(2);
+  const a = cur(g);
+  const b = g.players.find(x => x.id !== a.id);
+  forceDice(g, ['claw', '1', '1', '2', '2', '3']); // a enters Tokyo
+  g.act(a.id, { type: 'endTurn' });
+  a.cards.push('wings'); a.energy = 3;
+  forceDice(g, ['claw', 'claw', '1', '2', '3', 'energy']); // b attacks a
+  assert.ok(g.publicState().decision, 'a decision is pending');
+  assert.equal(g.publicState().decision.kind, 'wings');
+  assert.equal(g.publicState().decision.playerId, a.id);
+  assert.equal(a.hp, 10, 'damage waits for the answer');
+  assert.throws(() => g.act(b.id, { type: 'endTurn' }), /Waiting for/);
+  g.act(a.id, { type: 'decide', answer: true });
+  assert.equal(a.hp, 10);
+  assert.equal(a.energy, 1);
+  assert.equal(g.turn.step, 'buy', 'no yield prompt because no damage was taken');
+  assert.equal(g.tokyo.city, a.id);
+});
+
+test('Wings: declining takes the damage and the yield prompt follows', () => {
+  const g = makeGame(2);
+  const a = cur(g);
+  const b = g.players.find(x => x.id !== a.id);
+  forceDice(g, ['claw', '1', '1', '2', '2', '3']);
+  g.act(a.id, { type: 'endTurn' });
+  a.cards.push('wings'); a.energy = 2;
+  forceDice(g, ['claw', 'claw', '1', '2', '3', 'energy']);
+  g.act(a.id, { type: 'decide', answer: false });
+  assert.equal(a.hp, 8);
+  assert.equal(a.energy, 2);
+  assert.equal(g.turn.step, 'yield');
+  g.act(a.id, { type: 'yield', yes: true });
+  assert.equal(g.tokyo.city, b.id);
+});
+
+test('Wings with Discard-card damage (Flame Thrower) asks each defender in turn', () => {
+  const g = makeGame(3);
+  const p = cur(g);
+  const [x, y] = g.players.filter(o => o.id !== p.id);
+  x.cards.push('wings'); x.energy = 2;
+  g.shop = ['flame_thrower', 'corner_store', 'heal'];
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  p.energy = 3;
+  g.act(p.id, { type: 'buy', index: 0 });
+  assert.equal(g.publicState().decision.playerId, x.id);
+  assert.equal(y.hp, 10, 'the second target waits');
+  g.act(x.id, { type: 'decide', answer: true });
+  assert.equal(x.hp, 10);
+  assert.equal(y.hp, 8);
+  assert.equal(g.turn.step, 'buy');
+});
+
+test('Opportunist: another monster is offered the newly revealed card and can buy it', () => {
+  const g = makeGame(3);
+  const p = cur(g);
+  const opp = g.clockwiseFrom(p)[0];
+  opp.cards.push('opportunist'); opp.energy = 10;
+  g.shop = ['corner_store', 'heal', 'tanks'];
+  g.deck.push('skyscraper'); // next reveal
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  p.energy = 3;
+  g.act(p.id, { type: 'buy', index: 0 });
+  const d = g.publicState().decision;
+  assert.equal(d.kind, 'opportunist');
+  assert.equal(d.playerId, opp.id);
+  assert.deepEqual(d.data.cards.map(c => c.id), ['skyscraper']);
+  assert.throws(() => g.act(p.id, { type: 'endTurn' }), /Waiting for/);
+  g.act(opp.id, { type: 'decide', answer: { buy: 'skyscraper' } });
+  assert.equal(opp.vp, 4);
+  assert.equal(opp.energy, 4);
+  assert.ok(!g.shop.includes('skyscraper'));
+  // the card revealed to replace Skyscraper is offered too; pass on it
+  assert.equal(g.publicState().decision && g.publicState().decision.kind, 'opportunist');
+  g.act(opp.id, { type: 'decide', answer: { pass: true } });
+  assert.equal(g.publicState().decision, null);
+  g.act(p.id, { type: 'endTurn' });
+});
+
+test('Mimic copies a Keep card in play and loses the copy when that card leaves play', () => {
+  const g = makeGame(2);
+  const p = cur(g);
+  const o = g.players.find(x => x.id !== p.id);
+  p.cards.push('mimic');
+  o.cards.push('even_bigger'); o.maxHp = 12; o.hp = 12;
+  assert.throws(() => g.act(p.id, { type: 'mimic', cardId: 'nova_breath' }), /another monster has in play/);
+  g.act(p.id, { type: 'mimic', cardId: 'even_bigger' });
+  assert.equal(p.maxHp, 12);
+  assert.equal(p.hp, 12);
+  assert.ok(g.has(p, 'even_bigger'));
+  // o sells Even Bigger with Metamorph on their turn -> mimic counter comes back
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(p.id, { type: 'endTurn' });
+  o.cards.push('metamorph');
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(o.id, { type: 'sell', cardId: 'even_bigger' });
+  assert.equal(p.mimicTarget, null);
+  assert.equal(p.maxHp, 10);
+  assert.equal(p.hp, 10);
+});
+
+test('Parasitic Tentacles: buy a Keep card from another monster, paying them', () => {
+  const g = makeGame(2);
+  const p = cur(g);
+  const o = g.players.find(x => x.id !== p.id);
+  p.cards.push('parasitic_tentacles'); p.energy = 7;
+  o.cards.push('extra_head_1');
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(p.id, { type: 'buyFrom', playerId: o.id, cardId: 'extra_head_1' });
+  assert.deepEqual(o.cards, []);
+  assert.ok(p.cards.includes('extra_head_1'));
+  assert.equal(p.energy, 0);
+  assert.equal(o.energy, 7);
+});
+
+test('Psychic Probe: a non-current player rerolls one die of the roller, once per turn', () => {
+  const g = makeGame(2);
+  const p = cur(g);
+  const o = g.players.find(x => x.id !== p.id);
+  o.cards.push('psychic_probe');
+  assert.throws(() => g.act(o.id, { type: 'probe', index: 0 }), /no dice/);
+  g.act(p.id, { type: 'roll' });
+  g.act(o.id, { type: 'probe', index: 0 });
+  assert.deepEqual(g.turn.probed, [o.id]);
+  assert.throws(() => g.act(o.id, { type: 'probe', index: 1 }), /already used/);
+  // rng=0 always rolls '1', never a heart, so the card stays
+  assert.ok(o.cards.includes('psychic_probe'));
+});
+
+test('Psychic Probe is discarded when the reroll is a Heart', () => {
+  const g = makeGame(2, { rng: () => 3 / 6 }); // every roll is a heart
+  const p = cur(g);
+  const o = g.players.find(x => x.id !== p.id);
+  o.cards.push('psychic_probe');
+  g.act(p.id, { type: 'roll' });
+  g.act(o.id, { type: 'probe', index: 0 });
+  assert.ok(!o.cards.includes('psychic_probe'));
+  assert.ok(g.discard.includes('psychic_probe'));
+});
+
+test('a player leaving mid-game is out; the turn passes if it was theirs', () => {
+  const g = makeGame(3);
+  const p = cur(g);
+  g.removePlayer(p.id);
+  assert.equal(p.alive, false);
+  assert.equal(p.left, true);
+  assert.notEqual(g.turn.playerId, p.id);
+  assert.equal(g.phase, 'playing');
+  // host moves on if the host left
+  if (g.hostId === p.id) assert.fail('host should have been transferred');
+});
+
+test('a leaving player with a pending Wings question does not block the game', () => {
+  const g = makeGame(3);
+  const p = cur(g);
+  const [x, y] = g.players.filter(o => o.id !== p.id);
+  x.cards.push('wings'); x.energy = 2;
+  g.shop = ['flame_thrower', 'corner_store', 'heal'];
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  p.energy = 3;
+  g.act(p.id, { type: 'buy', index: 0 });
+  assert.equal(g.publicState().decision.playerId, x.id);
+  g.removePlayer(x.id);
+  assert.equal(g.publicState().decision, null);
+  assert.equal(y.hp, 8, 'the queued damage to the other target still resolves');
+  assert.equal(g.turn.step, 'buy');
+});
+
+test('host can end the game early; others cannot', () => {
+  const g = makeGame(3);
+  const notHost = g.players.find(p => p.id !== g.hostId);
+  assert.throws(() => g.act(notHost.id, { type: 'endGame' }), /Only the host/);
+  g.act(g.hostId, { type: 'endGame' });
+  assert.equal(g.phase, 'ended');
+  assert.equal(g.endedBy, 'host');
+  assert.equal(g.winner, null);
+});
