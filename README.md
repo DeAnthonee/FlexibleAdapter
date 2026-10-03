@@ -87,6 +87,24 @@ npm test
   monster is out, the rest keep playing). The host can end the game for
   everyone, and can remove a player who dropped offline.
 
+### Game Plus (optional)
+
+In the base game every monster is identical; only the artwork differs. The
+host can switch on **Game Plus** in the waiting room to give each monster a
+unique power. It is off by default so the classic game is unchanged.
+
+| Monster | Power | Effect |
+|---|---|---|
+| The King | King of the Hill | Gain 1 extra ★ whenever you start your turn in Tokyo. |
+| Gigazaur | Regenerating Scales | At the end of your turn, heal 1 if you are outside Tokyo. |
+| Cyber Bunny | Overclocked | One extra reroll every turn. |
+| Kraken | Ink Cloud | The first attack that hits you each turn deals 1 less damage. |
+| Alienoid | Energy Siphon | Gain 1 ⚡ at the end of each of your turns. |
+| Meka Dragon | Rocket Punch | Deal 1 extra damage when you attack from outside Tokyo. |
+
+These are house powers written for this app, not the official Power Up
+expansion.
+
 ### House rulings
 
 - Hearts heal first; any hearts beyond full Life remove Shrink then Poison

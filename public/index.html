@@ -58,6 +58,14 @@
       <div id="lobby-code" class="big-code">----</div>
       <button id="btn-copy-link" class="btn small" type="button">Copy invite link</button>
       <ul id="lobby-players" class="lobby-players"></ul>
+      <div class="option-box">
+        <label class="toggle" for="opt-powers">
+          <input type="checkbox" id="opt-powers">
+          <span class="switch" aria-hidden="true"></span>
+          <span class="toggle-text"><b>✨ Game Plus</b><small>Every monster gets a unique power. Off = classic rules.</small></span>
+        </label>
+        <ul id="powers-list" class="powers-list" hidden></ul>
+      </div>
       <p id="lobby-hint" class="hint"></p>
       <div class="home-actions">
         <button id="btn-start" class="btn primary big" type="button">Start game</button>

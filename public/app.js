@@ -152,6 +152,7 @@
         type: 'button', role: 'radio', 'aria-checked': selectedMonster === m.id ? 'true' : 'false',
         class: 'monster-opt' + (selectedMonster === m.id ? ' selected' : '') + (taken ? ' taken' : ''),
         style: `--mc:${m.color}`,
+        title: m.power ? `Game Plus power — ${m.power.name}: ${m.power.text}` : null,
         onclick: () => { if (taken) return; selectedMonster = m.id; renderMonsterPicker(); },
       }, el('span', { class: 'emoji' }, m.emoji), el('span', { class: 'name' }, m.name)));
     }
@@ -186,6 +187,7 @@
 
   // ------------------------------------------------------------ lobby
   $('#btn-start').addEventListener('click', () => send({ type: 'start' }));
+  $('#opt-powers').addEventListener('change', (e) => send({ type: 'setOptions', options: { powers: e.target.checked } }));
   $('#btn-leave').addEventListener('click', () => send({ type: 'leave' }));
   $('#btn-copy-link').addEventListener('click', async () => {
     const link = `${location.origin}/${me.code}`;
@@ -207,6 +209,15 @@
       ));
     }
     const isHost = state.hostId === me.playerId;
+    const powersOn = !!(state.options && state.options.powers);
+    const chk = $('#opt-powers');
+    chk.checked = powersOn;
+    chk.disabled = !isHost;
+    $('.toggle').title = isHost ? '' : 'Only the host can change this.';
+    const pl = $('#powers-list');
+    pl.hidden = !powersOn;
+    pl.innerHTML = '';
+    if (powersOn) for (const m of monsters) pl.append(el('li', {}, el('span', {}, m.emoji), el('span', { class: 'pname' }, `${m.name}: ${m.power.name}.`), el('span', { class: 'ptext' }, m.power.text)));
     $('#btn-start').hidden = !isHost;
     $('#btn-start').disabled = state.players.length < 2;
     $('#lobby-hint').textContent = state.players.length < 2
@@ -235,7 +246,7 @@
     const self = byId(me.playerId);
     const d = state.decision;
 
-    $('#game-code').textContent = state.code;
+    $('#game-code').textContent = state.code + (state.options && state.options.powers ? ' ✨' : '');
     $('#btn-end-game').hidden = !(state.hostId === me.playerId && state.phase === 'playing');
     renderBanner(t, cur, mine, self, d);
     renderTokyo();
@@ -320,6 +331,9 @@
         p.shrink ? el('span', { class: 'stat ctr' }, `🔻 ${p.shrink} shrink`) : null,
       ));
       card.append(el('div', { class: 'hpbar' }, el('div', { style: `width:${(100 * p.hp / Math.max(1, p.maxHp)).toFixed(0)}%` })));
+      if (state.options && state.options.powers && m.power) {
+        card.append(el('div', { class: 'power-chip', title: m.power.text }, '✨', el('span', {}, m.power.name)));
+      }
       if (p.cards.length) {
         const sellable = canSell && p.id === self.id;
         const buyable = canTentacle && p.id !== self.id && p.alive;
