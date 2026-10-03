@@ -220,6 +220,13 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .lobby-players .remove-bot { margin-left: 6px; }
 .badge.bot { background: var(--cyan); color: #04202a; }
 
+.invite { background: rgba(56, 232, 255, .1); border: 1px solid rgba(56, 232, 255, .45); border-radius: 14px; padding: 12px 14px; margin: 0 0 6px; text-align: left; }
+.invite b { color: var(--cyan); }
+.invite .who { color: var(--fg-muted); font-size: .88rem; margin-top: 2px; }
+.invite-box { margin: 4px 0 10px; }
+.invite-link { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--ink); color: var(--fg-muted); font-size: .9rem; text-align: center; outline: none; margin-bottom: 8px; }
+.btn-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
 /* ---------------------------------------------------- game options */
 .option-box { background: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 4px 0 10px; text-align: left; }
 .toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; }
@@ -346,7 +353,7 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   box-shadow: 0 4px 10px rgba(0, 0, 0, .45), inset 0 -3px 0 rgba(0, 0, 0, .25);
 }
 .pcard .names { min-width: 0; }
-.pcard .name { font-weight: 900; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .name { font-weight: 900; font-size: 1.02rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.15; overflow-wrap: anywhere; }
 .pcard .sub { font-size: .75rem; color: var(--fg-muted); }
 .badges { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .badge { font-size: .62rem; padding: 2px 7px; border-radius: 999px; background: var(--neon-2); color: #2b1300; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }

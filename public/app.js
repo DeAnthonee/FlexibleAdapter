@@ -138,6 +138,7 @@
         clearSession(); me = null; state = null; prevState = null; autoModal = null;
         closeModal();
         history.replaceState(null, '', '/');
+        $('#invite-banner').hidden = true; $('#btn-create').hidden = false; $('#btn-practice').hidden = false; $('#btn-join').classList.remove('primary'); $('#join-code').value = '';
         show('screen-home');
         takenMonsters = [];
         renderMonsterPicker();
@@ -145,7 +146,7 @@
       case 'lobbyInfo':
         takenMonsters = msg.taken;
         renderMonsterPicker();
-        if (msg.players.length) toast(`Game ${msg.code}: ${msg.players.join(', ')} waiting. Pick a monster and join!`, 'info');
+        showInvite(msg);
         break;
       case 'state':
         prevState = state;
@@ -187,6 +188,23 @@
     }
   }
 
+  /** A friend opened an invite link: lock the code in and make joining the obvious next step. */
+  function showInvite(info) {
+    const box = $('#invite-banner');
+    box.innerHTML = '';
+    const host = info.players[0];
+    box.append(
+      el('div', {}, '🎟️ You\'re invited to ', el('b', {}, host ? `${host}'s game` : 'a game'), ` (code ${info.code})`),
+      el('div', { class: 'who' }, info.players.length ? `Already in: ${info.players.join(', ')}. Enter your name, pick a monster, and press Join.` : 'Enter your name, pick a monster, and press Join.'),
+    );
+    box.hidden = false;
+    $('#join-code').value = info.code;
+    $('#btn-create').hidden = true;
+    $('#btn-practice').hidden = true;
+    $('#btn-join').classList.add('primary');
+    $('#name').focus();
+  }
+
   function homeValid() {
     const name = $('#name').value.trim();
     if (!name) { toast('Enter your name first.'); $('#name').focus(); return null; }
@@ -224,21 +242,33 @@
   $('#btn-add-bot').addEventListener('click', () => send({ type: 'addBot' }));
   $('#opt-powers').addEventListener('change', (e) => send({ type: 'setOptions', options: { powers: e.target.checked } }));
   $('#btn-leave').addEventListener('click', () => send({ type: 'leave' }));
-  $('#btn-copy-link').addEventListener('click', async () => {
-    const link = `${location.origin}/${me.code}`;
+  const inviteLink = () => `${location.origin}/${me.code}`;
+  async function copyInvite() {
+    const link = inviteLink();
     try { await navigator.clipboard.writeText(link); toast('Invite link copied!', 'info'); }
-    catch { prompt('Copy this link:', link); }
+    catch { const i = $('#invite-link'); i.focus(); i.select(); toast('Select the link and copy it.', 'info'); }
+  }
+  $('#btn-copy-link').addEventListener('click', copyInvite);
+  $('#btn-share').addEventListener('click', async () => {
+    const link = inviteLink();
+    if (navigator.share) {
+      try { await navigator.share({ title: 'King of Tokyo', text: `Join my King of Tokyo game! Code ${me.code}`, url: link }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    copyInvite();
   });
 
   function renderLobby() {
     $('#lobby-code').textContent = state.code;
+    $('#invite-link').value = inviteLink();
+    $('#btn-share').textContent = navigator.share ? '📤 Invite friends' : '📤 Copy invite link';
     const list = $('#lobby-players');
     list.innerHTML = '';
     for (const p of state.players) {
       const m = monster(p.monster);
       list.append(el('li', { style: `--mc:${m.color}` },
         art(m, 'art lobby-art', { thumb: true }),
-        el('span', {}, el('b', {}, p.name), ' ', el('span', { class: 'hint', style: 'margin:0' }, m.name)),
+        el('span', {}, el('b', {}, p.name)),
         p.bot ? el('span', { class: 'tag' }, '🤖 computer') : null,
         p.id === state.hostId ? el('span', { class: 'tag' }, 'host') : null,
         p.id === me.playerId ? el('span', { class: 'tag' }, 'you') : null,
@@ -387,7 +417,7 @@
       if (p.id === me.playerId) card.append(el('span', { class: 'you-tag' }, 'YOU'));
       card.append(el('div', { class: 'head' },
         el('span', { class: 'avatar' }, art(m, 'art avatar-art', { thumb: true })),
-        el('div', { class: 'names' }, el('div', { class: 'name' }, p.name), el('div', { class: 'sub' }, m.name)),
+        el('div', { class: 'names' }, el('div', { class: 'name', title: m.name }, p.name)),
         el('div', { class: 'badges' },
           inTokyo ? el('span', { class: 'badge' }, 'Tokyo') : null,
           p.bot ? el('span', { class: 'badge bot' }, '🤖 bot') : null,
