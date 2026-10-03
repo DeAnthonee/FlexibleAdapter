@@ -29,6 +29,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR === 'none' ? null : (process.env.DATA_DIR || path.join(__dirname, 'data'));
 const SNAPSHOT_FILE = DATA_DIR ? path.join(DATA_DIR, 'games.json') : null;
 const MAX_GAMES = Number(process.env.MAX_GAMES) || 500;
+const LOBBY_GRACE_MS = Number(process.env.LOBBY_GRACE_MS) || 2 * 60 * 1000; // keep a waiting-room seat while a phone is backgrounded
 const GAME_TTL_MS = 6 * 60 * 60 * 1000;   // drop idle games after 6 hours
 const EMPTY_TTL_MS = 10 * 60 * 1000;      // drop games nobody is connected to after 10 minutes
 const MAX_MESSAGE_BYTES = 16 * 1024;      // a game action is a few hundred bytes
@@ -147,6 +148,7 @@ function driveBots(room) {
 function send(ws, obj) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj)); }
 
 function attach(room, playerId, ws) {
+  if (room.lobbyTimers && room.lobbyTimers.has(playerId)) { clearTimeout(room.lobbyTimers.get(playerId)); room.lobbyTimers.delete(playerId); }
   if (!room.sockets.has(playerId)) room.sockets.set(playerId, new Set());
   room.sockets.get(playerId).add(ws);
   ws.room = room;
@@ -162,11 +164,22 @@ function detach(ws) {
     set.delete(ws);
     if (set.size === 0) {
       room.sockets.delete(ws.playerId);
+      room.game.setConnected(ws.playerId, false);
       if (room.game.phase === 'lobby') {
-        room.game.removePlayer(ws.playerId);
-        room.tokens.delete(ws.playerId);
-      } else {
-        room.game.setConnected(ws.playerId, false);
+        // Phones drop the connection when the browser is backgrounded (e.g. while sending the
+        // invite link). Keep the seat for a while so the player, and the host, can come back.
+        const pid = ws.playerId;
+        room.lobbyTimers = room.lobbyTimers || new Map();
+        clearTimeout(room.lobbyTimers.get(pid));
+        const timer = setTimeout(() => {
+          room.lobbyTimers.delete(pid);
+          if (room.sockets.has(pid) || room.game.phase !== 'lobby' || !games.has(room.game.code)) return;
+          room.game.removePlayer(pid);
+          room.tokens.delete(pid);
+          broadcast(room);
+        }, LOBBY_GRACE_MS);
+        timer.unref && timer.unref();
+        room.lobbyTimers.set(pid, timer);
       }
       broadcast(room);
     }
