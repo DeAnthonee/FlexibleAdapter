@@ -52,6 +52,7 @@ game/cards.js        The card deck and card effects
 public/index.html    Create/join screen, waiting room, game screen
 public/app.js        Browser client
 public/style.css     Styling
+public/img/          Monster artwork (640px boards + 160px thumbnails, WebP with alpha)
 test/engine.test.js  Rules tests (node --test)
 ```
 

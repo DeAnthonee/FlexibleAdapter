@@ -158,9 +158,9 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 }
 .poster > * { position: relative; }
 .poster-art { position: absolute; inset: 0; pointer-events: none; }
-.poster-monster { position: absolute; font-size: 4.2rem; opacity: .14; filter: blur(.5px); top: 10px; left: -6px; transform: rotate(-12deg); }
-.poster-monster.two { left: auto; right: -4px; top: 60px; transform: rotate(14deg); }
-.poster-monster.three { top: auto; bottom: 30px; left: 10px; font-size: 3rem; transform: rotate(-6deg); opacity: .1; }
+.poster-monster { position: absolute; width: 190px; height: 190px; opacity: .22; top: -20px; left: -40px; transform: rotate(-10deg); filter: saturate(1.2); }
+.poster-monster.two { left: auto; right: -50px; top: 40px; transform: rotate(10deg); }
+.poster-monster.three { top: auto; bottom: 110px; left: -30px; width: 150px; height: 150px; transform: rotate(-6deg); opacity: .16; }
 .form { margin-top: 10px; }
 .field { display: block; text-align: left; margin: 14px 0; }
 .field input {
@@ -177,6 +177,15 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
 }
 .monster-opt .emoji { font-size: 2.3rem; line-height: 1; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .5)); }
+.art { object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; }
+.pick-art { width: 84px; height: 84px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .55)); transition: transform .15s ease; }
+.monster-opt:hover:not(.taken) .pick-art, .monster-opt.selected .pick-art { transform: scale(1.08); }
+.lobby-art { width: 44px; height: 44px; }
+.avatar-art { width: 100%; height: 100%; object-fit: cover; transform: scale(1.75); transform-origin: 50% 22%; }
+.tokyo-art { width: 150px; height: 150px; filter: drop-shadow(0 12px 16px rgba(0, 0, 0, .65)); animation: stomp 2.4s ease-in-out infinite; }
+.standing-art { width: 28px; height: 28px; }
+.winner-art { display: flex; justify-content: center; }
+.winner-img { width: 220px; height: 220px; filter: drop-shadow(0 14px 20px rgba(0, 0, 0, .6)); animation: stomp 1.6s ease-in-out infinite; }
 .monster-opt .name { font-size: .8rem; font-weight: 800; }
 .monster-opt:hover:not(.taken) { transform: translateY(-2px); border-color: var(--mc); }
 .monster-opt.selected { border-color: var(--mc); background: var(--ink-3); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc) 35%, transparent), 0 0 24px color-mix(in srgb, var(--mc) 45%, transparent); transform: translateY(-2px) scale(1.03); }
@@ -293,6 +302,7 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .tokyo-slot .empty { color: var(--fg-muted); font-size: .9rem; text-align: center; }
 .tokyo-slot.occupied { border-style: solid; border-color: var(--neon-2); background: rgba(255, 180, 0, .09); box-shadow: inset 0 0 40px rgba(255, 180, 0, .12), 0 0 24px rgba(255, 180, 0, .18); }
 .tokyo-slot .emoji { font-size: 3.4rem; line-height: 1; filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .6)); animation: stomp 2.4s ease-in-out infinite; }
+.tokyo-slot { min-height: 210px; }
 .tokyo-slot .who { font-weight: 900; font-size: 1.05rem; }
 .tokyo-slot .you-tag { font-size: .7rem; color: var(--cyan); letter-spacing: .12em; text-transform: uppercase; font-weight: 800; }
 @keyframes stomp { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-4px) rotate(2deg); } }
@@ -313,8 +323,9 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .pcard .you-tag { position: absolute; top: 6px; right: 10px; font-size: .65rem; font-weight: 900; color: var(--cyan); letter-spacing: .14em; }
 .pcard .head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pcard .avatar {
-  width: 44px; height: 44px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
-  font-size: 1.7rem; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--mc) 70%, #fff), var(--mc) 70%);
+  width: 56px; height: 56px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+  font-size: 1.7rem; overflow: hidden; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--mc) 70%, #fff), var(--mc) 70%);
+  border: 2px solid color-mix(in srgb, var(--mc) 60%, #fff);
   box-shadow: 0 4px 10px rgba(0, 0, 0, .45), inset 0 -3px 0 rgba(0, 0, 0, .25);
 }
 .pcard .names { min-width: 0; }
