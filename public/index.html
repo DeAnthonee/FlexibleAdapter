@@ -14,6 +14,7 @@
 <body>
   <div class="sky" aria-hidden="true"></div>
   <div id="toast" class="toast" hidden></div>
+  <button id="update-chip" class="update-chip" type="button" hidden></button>
 
   <!-- ===================== HOME: create / join ===================== -->
   <section id="screen-home" class="screen screen-center">
@@ -48,6 +49,7 @@
         </div>
         <p id="home-error" class="error" hidden></p>
         <p class="hint">2 to 6 players. Share the 4-letter code with your friends.</p>
+        <p class="version-line"><span class="version"></span></p>
       </div>
     </div>
   </section>
@@ -84,6 +86,7 @@
         <button id="btn-start" class="btn primary big" type="button">Start game</button>
         <button id="btn-leave" class="btn big" type="button">Leave</button>
       </div>
+      <p class="version-line"><span class="version"></span></p>
     </div>
   </section>
 
@@ -93,7 +96,7 @@
       <div class="logo tiny"><span class="logo-king">King</span><span class="logo-of">of</span><span class="logo-tokyo">Tokyo</span></div>
       <div id="turn-banner" class="turn-banner" aria-live="polite"></div>
       <div class="topbar-right">
-        <span class="code-chip">Game <b id="game-code"></b></span>
+        <span class="code-chip">Game <b id="game-code"></b> <span class="version version-chip"></span></span>
         <button id="btn-rules" class="btn small desktop-only" type="button">Rules</button>
         <button id="btn-leave-game" class="btn small desktop-only" type="button">Leave</button>
         <button id="btn-end-game" class="btn small danger-outline desktop-only" type="button" hidden>End game</button>

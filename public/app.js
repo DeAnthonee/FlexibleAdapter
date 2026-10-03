@@ -53,6 +53,7 @@
   let lastSeq = -1;         // last batch of engine events we animated
   let botsToAdd = 0;        // "Practice vs computers": bots to add once the game is created
   let lastTurnPlayer = null; // to scroll the monster row when the turn passes
+  let appVersion = null;    // version of the server this page was loaded against (shown on every screen)
   let lastBuyKey = '';      // detects the moment my buy step starts (auto-open the shop sheet on phones)
   const isMobile = () => window.matchMedia('(max-width: 720px), (max-height: 540px)').matches;
 
@@ -76,6 +77,20 @@
     img.addEventListener('error', () => img.replaceWith(el('span', { class: cls + ' emoji' }, m.emoji)));
     return img;
   }
+
+  // ------------------------------------------------------------ version
+  function paintVersion(v) {
+    for (const e of document.querySelectorAll('.version')) e.textContent = v ? `v${v}` : '';
+  }
+  fetch('/health', { cache: 'no-store' }).then(r => r.json()).then(h => { appVersion = h.version; paintVersion(h.version); }).catch(() => {});
+  /** After a deploy the server is newer than this page: offer a reload (seats survive it). */
+  function noticeServerVersion(v) {
+    if (!v || !appVersion || v === appVersion) return;
+    const chip = $('#update-chip');
+    chip.textContent = `⬆️ New version v${v} is live. Tap to reload.`;
+    chip.hidden = false;
+  }
+  $('#update-chip').addEventListener('click', () => location.reload());
 
   // ------------------------------------------------------------ toast
   let toastTimer = null;
@@ -160,6 +175,7 @@
         showInvite(msg);
         break;
       case 'state':
+        noticeServerVersion(msg.version);
         prevState = state;
         state = msg.state;
         diceAnimating = false; diceAnimToken++;
