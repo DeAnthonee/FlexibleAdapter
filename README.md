@@ -62,6 +62,15 @@ messages per second. Run one process only: state is per process.
 `GET /health` returns `{"ok":true,"games":N,"playing":N,"lobby":N,"connections":N,"uptimeSec":N,"version":"…","persistence":true}`.
 A deploy script can postpone a restart while `playing` is above 0.
 
+### Version number
+
+The version in `package.json` is shown on every screen (home, waiting room and
+the game bar) and in `/health`, so players and the host can tell which build
+they are looking at. Every change bumps it: a patch bump (`1.1.0` → `1.1.1`)
+for tweaks and fixes, a minor bump (`1.1.0` → `1.2.0`) for new features. When
+a newer build goes live, open pages show a "New version is live, tap to
+reload" chip; the running game is unaffected because state lives on the server.
+
 Load test against a running server (not part of `npm test`):
 
 ```bash

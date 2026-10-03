@@ -108,7 +108,7 @@ function createRoom() {
 }
 
 function broadcast(room) {
-  const msg = JSON.stringify({ type: 'state', state: room.game.publicState() });
+  const msg = JSON.stringify({ type: 'state', state: room.game.publicState(), version: VERSION });
   for (const set of room.sockets.values()) for (const ws of set) if (ws.readyState === ws.OPEN) ws.send(msg);
   snapshotRoom(room);
   driveBots(room);
