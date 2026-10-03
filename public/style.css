@@ -534,7 +534,11 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   .tokyo-art { width: 64px; height: 64px; }
   .tokyo-slot .who { font-size: 1rem; }
   .tokyo-slot .empty { font-size: .82rem; text-align: left; }
-  .tokyo.with-bay .tokyo-slot { flex-direction: column; align-items: center; text-align: center; gap: 2px; }
+  .tokyo.with-bay .tokyo-slot { flex-direction: column; flex-wrap: nowrap; align-items: center; justify-content: flex-start; text-align: center; gap: 2px; padding: 8px 6px; min-width: 0; }
+  .tokyo.with-bay .tokyo-slot h4 { flex-basis: auto; width: 100%; }
+  .tokyo.with-bay .tokyo-art { width: 58px; height: 58px; }
+  .tokyo.with-bay .tokyo-slot .who { font-size: .9rem; line-height: 1.15; max-width: 100%; overflow-wrap: anywhere; }
+  .tokyo.with-bay .tokyo-slot .empty { text-align: center; font-size: .78rem; }
 
   /* Monsters: one swipeable row */
   .players { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; margin: 0 -10px; padding: 4px 10px 8px; scrollbar-width: none; }
@@ -584,7 +588,8 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   .turn-banner { order: 0; width: auto; flex: 1; text-align: center; }
   .game-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 10px; }
   .action-col { position: sticky; top: 46px; bottom: auto; margin-top: 0; padding: 0; background: none; }
-  .tokyo.with-bay .tokyo-slot { flex-direction: row; text-align: left; }
+  .tokyo.with-bay .tokyo-slot { flex-direction: row; flex-wrap: wrap; text-align: left; justify-content: flex-start; }
+  .tokyo.with-bay .tokyo-slot h4 { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
