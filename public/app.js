@@ -48,6 +48,7 @@
   let diceAnimToken = 0;
   let dismissedGameOver = false;
   let reconnectDelay = 1000;
+  let reconnectTimer = null;
   let autoModal = null;     // which automatic modal is open: 'yield' | 'decision:<id>' | 'gameover' | null
   let lastSeq = -1;         // last batch of engine events we animated
   let botsToAdd = 0;        // "Practice vs computers": bots to add once the game is created
@@ -111,10 +112,20 @@
     });
     ws.addEventListener('close', () => {
       if (me) toast('Connection lost. Reconnecting…', 'info');
-      setTimeout(connect, reconnectDelay);
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 10000);
     });
   }
+  // Phones suspend the page while another app is in front; reconnect the moment we are back.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    clearTimeout(reconnectTimer);
+    reconnectDelay = 1000;
+    connect();
+  });
+
   function send(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); else toast('Not connected to the server yet.'); }
   const act = (action) => send({ type: 'action', action });
 
@@ -270,6 +281,7 @@
         art(m, 'art lobby-art', { thumb: true }),
         el('span', {}, el('b', {}, p.name)),
         p.bot ? el('span', { class: 'tag' }, '🤖 computer') : null,
+        !p.connected && !p.bot ? el('span', { class: 'tag', style: 'color:var(--fg-muted)' }, 'reconnecting…') : null,
         p.id === state.hostId ? el('span', { class: 'tag' }, 'host') : null,
         p.id === me.playerId ? el('span', { class: 'tag' }, 'you') : null,
         p.bot && state.hostId === me.playerId ? el('button', { class: 'btn tiny remove-bot', title: 'Remove this computer player', onclick: () => send({ type: 'removeBot', botId: p.id }) }, '✕') : null,

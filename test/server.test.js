@@ -141,3 +141,33 @@ test('computer players act on their own after the host adds them', async () => {
     h.close();
   } finally { await stopServer(s); }
 });
+
+test('a waiting-room player who drops offline keeps the seat (and host) during the grace period', async () => {
+  const s = await startServer({ DATA_DIR: 'none', LOBBY_GRACE_MS: '400' });
+  try {
+    const h = await new Client(s.port).open();
+    h.send({ type: 'create', name: 'Host', monster: 'king' });
+    const joined = await h.next('joined');
+    const g = await new Client(s.port).open();
+    g.send({ type: 'join', code: joined.code, name: 'Guest', monster: 'kraken' });
+    await g.next('joined');
+    await g.waitState(st => st.players.length === 2);
+    // host's phone goes to the messaging app: the socket closes
+    h.close();
+    const dropped = await g.waitState(st => st.players.some(p => p.name === 'Host' && !p.connected));
+    assert.equal(dropped.hostId, joined.playerId, 'still the host while offline');
+    assert.equal(dropped.players.length, 2, 'seat kept');
+    // host comes back within the grace period
+    const h2 = await new Client(s.port).open();
+    h2.send({ type: 'rejoin', code: joined.code, playerId: joined.playerId, token: joined.token });
+    assert.equal((await h2.next()).type, 'joined', 'rejoin accepted');
+    const back = await g.waitState(st => st.players.every(p => p.connected));
+    assert.equal(back.hostId, joined.playerId);
+    // now drop for longer than the grace period: the seat is released
+    h2.close();
+    const gone = await g.waitState(st => st.players.length === 1);
+    assert.equal(gone.players[0].name, 'Guest');
+    assert.equal(gone.hostId, gone.players[0].id, 'host passed to the remaining player');
+    g.close();
+  } finally { await stopServer(s); }
+});

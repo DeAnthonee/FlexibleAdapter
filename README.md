@@ -51,6 +51,7 @@ Environment variables:
 | `PORT`      | `3000`    | Listen port; binds all interfaces. |
 | `DATA_DIR`  | `./data`  | Folder for the snapshot file; must be writable. `none` disables persistence. |
 | `MAX_GAMES` | `500`     | Cap on simultaneous games. |
+| `LOBBY_GRACE_MS` | `120000` | How long a waiting-room seat (and host role) is kept for a player whose connection dropped, e.g. a phone switching apps. |
 | `BOT_DELAY_MS` | `900`  | Pause before a computer player acts. |
 | `BOT_ROLL_DELAY_MS` | `2400` | Pause after a computer player rolls, so the dice animation can finish. |
 
