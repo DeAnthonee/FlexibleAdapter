@@ -27,6 +27,7 @@
       <p class="tagline">Giant monsters. One city. First to 20 ★ or the last one standing wins.</p>
 
       <div class="form">
+        <div id="invite-banner" class="invite" hidden></div>
         <label class="field" for="name">
           <span class="label">Your name</span>
           <input id="name" maxlength="20" placeholder="e.g. Godzilla fan" autocomplete="nickname">
@@ -57,7 +58,14 @@
       <h2 class="display">Waiting room</h2>
       <p class="label">Game code</p>
       <div id="lobby-code" class="big-code">----</div>
-      <button id="btn-copy-link" class="btn small" type="button">Copy invite link</button>
+      <div class="invite-box">
+        <input id="invite-link" class="invite-link" readonly aria-label="Invite link">
+        <div class="btn-row">
+          <button id="btn-share" class="btn primary" type="button">📤 Invite friends</button>
+          <button id="btn-copy-link" class="btn" type="button">Copy link</button>
+        </div>
+        <p class="hint" style="margin:6px 0 0">Friends who open the link land straight in this game.</p>
+      </div>
       <ul id="lobby-players" class="lobby-players"></ul>
       <div id="bot-row" class="bot-row" hidden>
         <button id="btn-add-bot" class="btn small" type="button">🤖 Add computer player</button>
