@@ -63,6 +63,8 @@ export class Game {
     this.winner = null;
     this.endedBy = null;      // 'host' when the host ended the game early
     this.options = { ...DEFAULT_OPTIONS };
+    this.events = [];         // what happened during the latest action (for client animations)
+    this.seq = 0;             // bumps on every action so clients play each batch of events once
     this.logs = [];
     this.steps = [];          // queued resolution steps (functions)
     this.cursor = 0;          // insertion point for newly enqueued steps
@@ -80,6 +82,10 @@ export class Game {
   }
 
   touch() { this.updatedAt = Date.now(); }
+
+  /** Start a new action: clear last action's events. */
+  beginAction() { this.events = []; this.seq++; }
+  emit(event) { this.events.push(event); }
 
   player(id) { return this.players.find(p => p.id === id); }
   alivePlayers() { return this.players.filter(p => p.alive); }
@@ -168,6 +174,7 @@ export class Game {
   removePlayer(id) {
     const p = this.player(id);
     if (!p) return;
+    this.beginAction();
     if (this.phase === 'lobby') {
       this.players = this.players.filter(x => x.id !== id);
       this.log(`${p.name} left.`);
@@ -196,6 +203,7 @@ export class Game {
   setOptions(byId, opts) {
     if (this.phase !== 'lobby') throw new GameError('Options can only be changed before the game starts.');
     if (byId !== this.hostId) throw new GameError('Only the host can change game options.');
+    this.beginAction();
     if (opts && typeof opts.powers === 'boolean' && opts.powers !== this.options.powers) {
       this.options.powers = opts.powers;
       this.log(opts.powers ? '✨ Game Plus is on: every monster has a unique power.' : 'Game Plus is off: classic rules.');
@@ -207,6 +215,7 @@ export class Game {
     if (this.phase !== 'lobby') throw new GameError('Game already started.');
     if (byId !== this.hostId) throw new GameError('Only the host can start the game.');
     if (this.players.length < MIN_PLAYERS) throw new GameError(`Need at least ${MIN_PLAYERS} players.`);
+    this.beginAction();
     this.phase = 'playing';
     if (this.options.powers) this.log('✨ Game Plus: monster powers are active.');
     this.bayActive = this.players.length >= 5;
@@ -230,6 +239,7 @@ export class Game {
   endGame(byId) {
     if (byId !== this.hostId) throw new GameError('Only the host can end the game.');
     if (this.phase === 'ended') return;
+    this.beginAction();
     this.phase = 'ended';
     this.endedBy = 'host';
     this.winner = null;
@@ -300,7 +310,7 @@ export class Game {
         if (this.power(p, 'gigazaur') && !this.inTokyo(p) && p.hp < p.maxHp) { this.log(`${p.name}'s Regenerating Scales:`); this.heal(p, 1); }
         if (p.poison > 0) {
           this.log(`${p.name} suffers ${p.poison} Poison damage.`);
-          this.damage(p, p.poison, { attack: false, source: null });
+          this.damage(p, p.poison, { attack: false, source: null, via: 'poison' });
         }
       },
       () => {
@@ -388,23 +398,26 @@ export class Game {
    * is needed). Callers that enqueue follow-up steps should do so from
    * `after`, or enqueue them after calling damage().
    */
-  damage(p, n, { source = null, attack = true } = {}, after = () => {}) {
+  damage(p, n, { source = null, attack = true, via = null } = {}, after = () => {}) {
     if (n <= 0 || !p.alive) return after(0);
+    via = via || (attack ? 'claw' : source ? 'card' : 'poison');
+    const from = source ? source.id : null;
+    const blocked = (by) => { this.emit({ type: 'blocked', from, to: p.id, by }); return after(0); };
     if (attack && this.power(p, 'kraken') && this.turn && !this.turn.inkUsed[p.id]) {
       this.turn.inkUsed[p.id] = true;
       n -= 1;
       this.log(`${p.name}'s Ink Cloud absorbs 1 damage.`);
-      if (n <= 0) return after(0);
+      if (n <= 0) return blocked('ink');
     }
     if (this.has(p, 'armor_plating') && n === 1) {
       this.log(`${p.name}'s Armor Plating ignores 1 damage.`);
-      return after(0);
+      return blocked('armor');
     }
     if (this.has(p, 'camouflage')) {
       let saved = 0;
       for (let i = 0; i < n; i++) if (this.roll() === 'heart') saved++;
       if (saved) { n -= saved; this.log(`${p.name}'s Camouflage cancels ${saved} damage.`); }
-      if (n <= 0) return after(0);
+      if (n <= 0) return blocked('camouflage');
     }
     if (this.has(p, 'wings') && p.energy >= 2) {
       const amount = n;
@@ -412,19 +425,20 @@ export class Game {
         if (use) {
           p.energy -= 2;
           this.log(`${p.name} spends 2 ⚡ on Wings and takes no damage.`);
-          after(0);
+          blocked('wings');
         } else {
-          after(this.applyDamage(p, amount, source));
+          after(this.applyDamage(p, amount, source, via));
         }
       });
       return;
     }
-    return after(this.applyDamage(p, n, source));
+    return after(this.applyDamage(p, n, source, via));
   }
 
-  applyDamage(p, n, source) {
+  applyDamage(p, n, source, via = 'card') {
     p.hp = Math.max(0, p.hp - n);
     this.log(`${p.name} takes ${n} damage (${p.hp} ♥ left).`);
+    this.emit({ type: 'damage', from: source ? source.id : null, to: p.id, amount: n, via });
     if (source && source.id !== p.id) {
       if (this.has(source, 'poison_spit')) { p.poison++; this.log(`${p.name} gets a Poison counter.`); }
       if (this.has(source, 'shrink_ray')) { p.shrink++; this.log(`${p.name} gets a Shrink counter.`); }
@@ -457,6 +471,7 @@ export class Game {
     p.alive = false;
     p.hp = 0;
     this.log(`💀 ${p.name} has been eliminated!`);
+    this.emit({ type: 'ko', to: p.id });
     for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
     p.mimicTarget = null;
     this.closeBayIfNeeded();
@@ -567,6 +582,7 @@ export class Game {
     const t = this.turn;
     const type = action && action.type;
     this.cursor = 0;
+    this.beginAction();
 
     // Always allowed.
     if (type === 'endGame') { this.endGame(playerId); return; }
@@ -779,12 +795,12 @@ export class Game {
     const wasInTokyo = targets.filter(o => this.inTokyo(o)).map(o => o.id);
     const scorched = fire.filter(o => !targets.includes(o));
 
-    this.damageAll(targets.map(o => ({ p: o, n: dmg + (fire.includes(o) ? 1 : 0) })), { source: p, attack: attacking }, (taken) => {
+    this.damageAll(targets.map(o => ({ p: o, n: dmg + (fire.includes(o) ? 1 : 0) })), { source: p, attack: attacking, via: attacking ? 'claw' : 'acid' }, (taken) => {
       for (const id of wasInTokyo) t.yieldDamage[id] = taken[id] || 0;
     });
     if (scorched.length) {
       this.enqueue(() => this.log(`${scorched.map(o => o.name).join(' and ')} ${scorched.length > 1 ? 'are' : 'is'} scorched by Fire Breathing.`));
-      this.damageAll(scorched.map(o => ({ p: o, n: 1 })), { source: p, attack: false });
+      this.damageAll(scorched.map(o => ({ p: o, n: 1 })), { source: p, attack: false, via: 'fire' });
     }
     this.enqueue(() => {
       if (this.phase === 'ended' || this.checkWinLastStanding()) return;
@@ -826,7 +842,7 @@ export class Game {
       this.leaveTokyo(p);
       if (this.has(p, 'burrowing')) {
         this.log(`${p.name}'s Burrowing bites back.`);
-        this.enqueue(() => this.damage(attacker, 1, { source: p, attack: false }));
+        this.enqueue(() => this.damage(attacker, 1, { source: p, attack: false, via: 'bite' }));
       }
     } else {
       this.log(`${p.name} stays in Tokyo.`);
@@ -983,6 +999,8 @@ export class Game {
       turn: this.turn ? { ...this.turn, labCard: this.turn.labCard ? cardView(this.turn.labCard) : null } : null,
       decision: this.decisions.length ? this.decisions[0] : null,
       logs: this.logs.slice(-80),
+      seq: this.seq,
+      events: this.events,
       monsters: MONSTERS,
     };
   }

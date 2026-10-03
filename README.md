@@ -87,6 +87,16 @@ npm test
 - Reconnection after refresh. Any player can leave a running game (their
   monster is out, the rest keep playing). The host can end the game for
   everyone, and can remove a player who dropped offline.
+- Works on desktop and phones. On a phone the whole turn fits one screen:
+  a compact Tokyo strip, a swipeable row of monster boards, your dice and
+  buttons pinned to the bottom, and the shop and log as slide-up sheets.
+  Portrait and landscape both work; the shop opens by itself when it is
+  your turn to buy.
+- Attack animations on the boards: the attacker's board lunges, the target
+  shakes with a claw slash (or fire, poison, card blast), a damage number
+  floats up, blocks show a shield, and knockouts stamp "K.O.". The engine
+  reports these as events with each update, so every player sees them.
+  Honours the reduced-motion setting.
 
 ### Game Plus (optional)
 
