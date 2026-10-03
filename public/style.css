@@ -327,7 +327,13 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   border-top: 5px solid var(--mc);
   transition: box-shadow .2s, transform .2s;
 }
-.pcard.current { border-color: var(--neon-2); box-shadow: 0 0 0 2px var(--neon-2), 0 0 22px rgba(255, 180, 0, .35), var(--shadow); }
+.pcard.current { border-color: var(--neon-2); box-shadow: 0 0 0 2px var(--neon-2), 0 0 22px rgba(255, 180, 0, .35), var(--shadow); animation: turnpulse 1.8s ease-in-out infinite; }
+@keyframes turnpulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--neon-2), 0 0 14px rgba(255, 180, 0, .25), var(--shadow); }
+  50% { box-shadow: 0 0 0 3px #ffd466, 0 0 34px rgba(255, 180, 0, .7), var(--shadow); }
+}
+.pcard.current.hit { animation: shake .5s ease, turnpulse 1.8s ease-in-out infinite; }
+.pcard.current.lunge { animation: lunge .55s cubic-bezier(.3, 1.3, .5, 1), turnpulse 1.8s ease-in-out infinite; }
 .pcard.dead { opacity: .45; filter: grayscale(1); }
 .pcard.hit { animation: shake .5s ease; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px) rotate(-1deg); } 40% { transform: translateX(6px) rotate(1deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }

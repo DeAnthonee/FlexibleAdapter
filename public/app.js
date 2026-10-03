@@ -51,6 +51,7 @@
   let autoModal = null;     // which automatic modal is open: 'yield' | 'decision:<id>' | 'gameover' | null
   let lastSeq = -1;         // last batch of engine events we animated
   let botsToAdd = 0;        // "Practice vs computers": bots to add once the game is created
+  let lastTurnPlayer = null; // to scroll the monster row when the turn passes
   let lastBuyKey = '';      // detects the moment my buy step starts (auto-open the shop sheet on phones)
   const isMobile = () => window.matchMedia('(max-width: 720px), (max-height: 540px)').matches;
 
@@ -303,6 +304,7 @@
     renderBanner(t, cur, mine, self, d);
     renderTokyo();
     renderPlayers(self, t, d);
+    if (t.playerId !== lastTurnPlayer) { lastTurnPlayer = t.playerId; scrollToCurrentPlayer(); }
     renderActionPanel(t, cur, mine, self, d);
     renderShop(t, cur, mine, self, d);
     renderLog();
@@ -429,6 +431,15 @@
       }
       box.append(card);
     }
+  }
+
+  /** On phones the monster boards scroll sideways: bring the active player's board into view. */
+  function scrollToCurrentPlayer() {
+    const row = $('#players');
+    const card = row.querySelector('.pcard.current');
+    if (!card || row.scrollWidth <= row.clientWidth + 1) return; // nothing to scroll (desktop grid)
+    const left = card.offsetLeft - (row.clientWidth - card.offsetWidth) / 2;
+    row.scrollTo({ left: Math.max(0, left), behavior: reducedMotion() ? 'auto' : 'smooth' });
   }
 
   function diceEl(dice, { interactive, animateKey, probe }) {
