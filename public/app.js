@@ -37,17 +37,25 @@
   let autoModal = null;     // which automatic modal is open: 'yield' | 'decision:<id>' | 'gameover' | null
 
   const FALLBACK_MONSTERS = [
-    { id: 'king', name: 'The King', emoji: '🦍', color: '#d08a3c' },
-    { id: 'gigazaur', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c' },
-    { id: 'cyber_bunny', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2' },
-    { id: 'kraken', name: 'Kraken', emoji: '🐙', color: '#5b7cff' },
-    { id: 'alienoid', name: 'Alienoid', emoji: '👽', color: '#9ad53a' },
-    { id: 'meka_dragon', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff' },
+    { id: 'king', image: '/img/king.webp', thumb: '/img/king-thumb.webp', name: 'The King', emoji: '🦍', color: '#d08a3c' },
+    { id: 'gigazaur', image: '/img/gigazaur.webp', thumb: '/img/gigazaur-thumb.webp', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c' },
+    { id: 'cyber_bunny', image: '/img/cyber_bunny.webp', thumb: '/img/cyber_bunny-thumb.webp', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2' },
+    { id: 'kraken', image: '/img/kraken.webp', thumb: '/img/kraken-thumb.webp', name: 'Kraken', emoji: '🐙', color: '#5b7cff' },
+    { id: 'alienoid', image: '/img/alienoid.webp', thumb: '/img/alienoid-thumb.webp', name: 'Alienoid', emoji: '👽', color: '#9ad53a' },
+    { id: 'meka_dragon', image: '/img/meka_dragon.webp', thumb: '/img/meka_dragon-thumb.webp', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff' },
   ];
   monsters = FALLBACK_MONSTERS;
   const monster = (id) => monsters.find(m => m.id === id) || { name: '?', emoji: '❓', color: '#888' };
   const hasPower = (p, id) => p.cards.some(c => c.id === id) || (p.mimicTarget && p.mimicTarget.id === id && p.cards.some(c => c.id === 'mimic'));
   const byId = (id) => state.players.find(p => p.id === id);
+  /** Monster artwork; falls back to the emoji if the image is missing or fails to load. */
+  function art(m, cls = 'art', { thumb = false } = {}) {
+    const src = thumb ? m.thumb : m.image;
+    if (!src) return el('span', { class: cls + ' emoji' }, m.emoji);
+    const img = el('img', { class: cls, src, alt: m.name, draggable: 'false' });
+    img.addEventListener('error', () => img.replaceWith(el('span', { class: cls + ' emoji' }, m.emoji)));
+    return img;
+  }
 
   // ------------------------------------------------------------ toast
   let toastTimer = null;
@@ -154,7 +162,7 @@
         style: `--mc:${m.color}`,
         title: m.power ? `Game Plus power — ${m.power.name}: ${m.power.text}` : null,
         onclick: () => { if (taken) return; selectedMonster = m.id; renderMonsterPicker(); },
-      }, el('span', { class: 'emoji' }, m.emoji), el('span', { class: 'name' }, m.name)));
+      }, art(m, 'art pick-art'), el('span', { class: 'name' }, m.name)));
     }
   }
 
@@ -202,7 +210,7 @@
     for (const p of state.players) {
       const m = monster(p.monster);
       list.append(el('li', { style: `--mc:${m.color}` },
-        el('span', { class: 'emoji' }, m.emoji),
+        art(m, 'art lobby-art', { thumb: true }),
         el('span', {}, el('b', {}, p.name), ' ', el('span', { class: 'hint', style: 'margin:0' }, m.name)),
         p.id === state.hostId ? el('span', { class: 'tag' }, 'host') : null,
         p.id === me.playerId ? el('span', { class: 'tag' }, 'you') : null,
@@ -288,7 +296,10 @@
     const slot = (title, pid) => {
       const p = pid ? byId(pid) : null;
       const s = el('div', { class: 'tokyo-slot' + (p ? ' occupied' : '') }, el('h4', {}, title));
-      if (p) s.append(el('div', { class: 'emoji' }, monster(p.monster).emoji), el('div', { class: 'who' }, p.name), p.id === me.playerId ? el('div', { class: 'you-tag' }, 'that\'s you') : null);
+      if (p) {
+        s.append(art(monster(p.monster), 'art tokyo-art'), el('div', { class: 'who' }, p.name));
+        if (p.id === me.playerId) s.append(el('div', { class: 'you-tag' }, 'that\'s you'));
+      }
       else s.append(el('div', { class: 'empty' }, 'Empty. Roll a 🐾 to move in.'));
       return s;
     };
@@ -314,7 +325,7 @@
       });
       if (p.id === me.playerId) card.append(el('span', { class: 'you-tag' }, 'YOU'));
       card.append(el('div', { class: 'head' },
-        el('span', { class: 'avatar' }, m.emoji),
+        el('span', { class: 'avatar' }, art(m, 'art avatar-art', { thumb: true })),
         el('div', { class: 'names' }, el('div', { class: 'name' }, p.name), el('div', { class: 'sub' }, m.name)),
         el('div', { class: 'badges' },
           inTokyo ? el('span', { class: 'badge' }, 'Tokyo') : null,
@@ -539,7 +550,7 @@
   function standings() {
     const sorted = [...state.players].sort((a, b) => (b.alive - a.alive) || (b.vp - a.vp) || (b.hp - a.hp));
     return el('ul', { class: 'standings' }, sorted.map(p => el('li', {},
-      el('span', {}, monster(p.monster).emoji), el('b', {}, p.name), p.alive ? null : el('small', { class: 'hint', style: 'margin:0' }, 'out'),
+      art(monster(p.monster), 'art standing-art', { thumb: true }), el('b', {}, p.name), p.alive ? null : el('small', { class: 'hint', style: 'margin:0' }, 'out'),
       el('span', { class: 'pts' }, `${p.vp} ★`))));
   }
 
@@ -549,7 +560,7 @@
       const w = state.players.find(p => p.id === state.winner);
       const hostEnded = state.endedBy === 'host';
       openModal('gameover',
-        el('div', { class: 'winner-emoji' }, w ? monster(w.monster).emoji : hostEnded ? '🛑' : '💀'),
+        el('div', { class: 'winner-art' }, w ? art(monster(w.monster), 'art winner-img') : el('span', { class: 'winner-emoji' }, hostEnded ? '🛑' : '💀')),
         el('h2', {}, hostEnded ? 'Game over' : w ? `${w.name} is the King of Tokyo!` : 'Everyone was destroyed!'),
         el('p', {}, hostEnded ? 'The host ended the game. Final standings:' : w && w.id === me.playerId ? 'You win! 🎉' : (w ? `${w.name} finished with ${w.vp} ★.` : 'No monster survived.')),
         standings(),

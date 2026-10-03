@@ -16,17 +16,17 @@ export const FACES = ['1', '2', '3', 'heart', 'energy', 'claw'];
 // Each monster's `power` only applies when the host turns on the "Game Plus"
 // option in the waiting room. In the base game every monster is identical.
 export const MONSTERS = [
-  { id: 'king', name: 'The King', emoji: '🦍', color: '#d08a3c',
+  { id: 'king', image: '/img/king.webp', thumb: '/img/king-thumb.webp', name: 'The King', emoji: '🦍', color: '#d08a3c',
     power: { name: 'King of the Hill', text: 'Gain 1 extra ★ whenever you start your turn in Tokyo.' } },
-  { id: 'gigazaur', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c',
+  { id: 'gigazaur', image: '/img/gigazaur.webp', thumb: '/img/gigazaur-thumb.webp', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c',
     power: { name: 'Regenerating Scales', text: 'At the end of your turn, heal 1 if you are outside Tokyo.' } },
-  { id: 'cyber_bunny', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2',
+  { id: 'cyber_bunny', image: '/img/cyber_bunny.webp', thumb: '/img/cyber_bunny-thumb.webp', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2',
     power: { name: 'Overclocked', text: 'You get one extra reroll every turn.' } },
-  { id: 'kraken', name: 'Kraken', emoji: '🐙', color: '#5b7cff',
+  { id: 'kraken', image: '/img/kraken.webp', thumb: '/img/kraken-thumb.webp', name: 'Kraken', emoji: '🐙', color: '#5b7cff',
     power: { name: 'Ink Cloud', text: 'The first attack that hits you each turn deals 1 less damage.' } },
-  { id: 'alienoid', name: 'Alienoid', emoji: '👽', color: '#9ad53a',
+  { id: 'alienoid', image: '/img/alienoid.webp', thumb: '/img/alienoid-thumb.webp', name: 'Alienoid', emoji: '👽', color: '#9ad53a',
     power: { name: 'Energy Siphon', text: 'Gain 1 ⚡ at the end of each of your turns.' } },
-  { id: 'meka_dragon', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff',
+  { id: 'meka_dragon', image: '/img/meka_dragon.webp', thumb: '/img/meka_dragon-thumb.webp', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff',
     power: { name: 'Rocket Punch', text: 'Deal 1 extra damage when you attack from outside Tokyo.' } },
 ];
 export const DEFAULT_OPTIONS = { powers: false };
