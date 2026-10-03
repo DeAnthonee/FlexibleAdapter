@@ -13,14 +13,23 @@
 import { CARDS, CARD_BY_ID, cardView } from './cards.js';
 
 export const FACES = ['1', '2', '3', 'heart', 'energy', 'claw'];
+// Each monster's `power` only applies when the host turns on the "Game Plus"
+// option in the waiting room. In the base game every monster is identical.
 export const MONSTERS = [
-  { id: 'king', name: 'The King', emoji: '🦍', color: '#d08a3c' },
-  { id: 'gigazaur', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c' },
-  { id: 'cyber_bunny', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2' },
-  { id: 'kraken', name: 'Kraken', emoji: '🐙', color: '#5b7cff' },
-  { id: 'alienoid', name: 'Alienoid', emoji: '👽', color: '#9ad53a' },
-  { id: 'meka_dragon', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff' },
+  { id: 'king', name: 'The King', emoji: '🦍', color: '#d08a3c',
+    power: { name: 'King of the Hill', text: 'Gain 1 extra ★ whenever you start your turn in Tokyo.' } },
+  { id: 'gigazaur', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c',
+    power: { name: 'Regenerating Scales', text: 'At the end of your turn, heal 1 if you are outside Tokyo.' } },
+  { id: 'cyber_bunny', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2',
+    power: { name: 'Overclocked', text: 'You get one extra reroll every turn.' } },
+  { id: 'kraken', name: 'Kraken', emoji: '🐙', color: '#5b7cff',
+    power: { name: 'Ink Cloud', text: 'The first attack that hits you each turn deals 1 less damage.' } },
+  { id: 'alienoid', name: 'Alienoid', emoji: '👽', color: '#9ad53a',
+    power: { name: 'Energy Siphon', text: 'Gain 1 ⚡ at the end of each of your turns.' } },
+  { id: 'meka_dragon', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff',
+    power: { name: 'Rocket Punch', text: 'Deal 1 extra damage when you attack from outside Tokyo.' } },
 ];
+export const DEFAULT_OPTIONS = { powers: false };
 
 export const MAX_PLAYERS = 6;
 export const MIN_PLAYERS = 2;
@@ -53,6 +62,7 @@ export class Game {
     this.turn = null;
     this.winner = null;
     this.endedBy = null;      // 'host' when the host ended the game early
+    this.options = { ...DEFAULT_OPTIONS };
     this.logs = [];
     this.steps = [];          // queued resolution steps (functions)
     this.cursor = 0;          // insertion point for newly enqueued steps
@@ -85,6 +95,9 @@ export class Game {
   currentPlayer() { return this.turn ? this.player(this.turn.playerId) : null; }
   roll() { return FACES[Math.floor(this.rng() * 6)]; }
   monsterName(p) { return MONSTERS.find(m => m.id === p.monster).name; }
+  /** Does p's monster power apply? Only in Game Plus mode. */
+  power(p, monsterId) { return this.options.powers && p.monster === monsterId; }
+  powerName(p) { return MONSTERS.find(m => m.id === p.monster).power.name; }
 
   /** Players in clockwise order starting after `from`. */
   clockwiseFrom(from) {
@@ -179,11 +192,23 @@ export class Game {
     if (p) p.connected = connected;
   }
 
+  /** Host changes game options while in the lobby. */
+  setOptions(byId, opts) {
+    if (this.phase !== 'lobby') throw new GameError('Options can only be changed before the game starts.');
+    if (byId !== this.hostId) throw new GameError('Only the host can change game options.');
+    if (opts && typeof opts.powers === 'boolean' && opts.powers !== this.options.powers) {
+      this.options.powers = opts.powers;
+      this.log(opts.powers ? '✨ Game Plus is on: every monster has a unique power.' : 'Game Plus is off: classic rules.');
+    }
+    this.touch();
+  }
+
   start(byId) {
     if (this.phase !== 'lobby') throw new GameError('Game already started.');
     if (byId !== this.hostId) throw new GameError('Only the host can start the game.');
     if (this.players.length < MIN_PLAYERS) throw new GameError(`Need at least ${MIN_PLAYERS} players.`);
     this.phase = 'playing';
+    if (this.options.powers) this.log('✨ Game Plus: monster powers are active.');
     this.bayActive = this.players.length >= 5;
     this.deck = shuffle(CARDS.map(c => c.id), this.rng);
     this.shop = [];
@@ -238,8 +263,9 @@ export class Game {
       step: 'roll',            // roll | yield | buy
       dice: [],
       diceCount: Math.max(1, 6 + extraDice - p.shrink + diceAdjust),
-      rollsLeft: 3 + (this.has(p, 'giant_brain') ? 1 : 0),
+      rollsLeft: 3 + (this.has(p, 'giant_brain') ? 1 : 0) + (this.power(p, 'cyber_bunny') ? 1 : 0),
       rolled: false,
+      inkUsed: {},             // playerId -> true once Kraken's Ink Cloud absorbed a hit this turn
       pendingYield: [],
       yieldDamage: {},         // targetId -> damage taken this attack (for Jets)
       attacked: false,
@@ -254,6 +280,7 @@ export class Game {
     if (this.inTokyo(p)) {
       const bonus = 2 + (this.has(p, 'urbavore') ? 1 : 0);
       this.gainVp(p, bonus, 'for starting the turn in Tokyo');
+      if (this.power(p, 'king')) this.gainVp(p, 1, '(King of the Hill)');
       this.checkWin();
     }
     if (this.has(p, 'made_in_a_lab') && this.deck.length) this.turn.labCard = this.deck[this.deck.length - 1];
@@ -269,6 +296,8 @@ export class Game {
         if (this.has(p, 'energy_hoarder') && p.energy >= 6) this.gainVp(p, Math.floor(p.energy / 6), '(Energy Hoarder)');
         if (this.has(p, 'solar_powered') && p.energy === 0) this.gainEnergy(p, 1, '(Solar Powered)');
         if (this.has(p, 'rooting_for_the_underdog') && this.others(p).every(o => o.vp > p.vp)) this.gainVp(p, 1, '(Rooting for the Underdog)');
+        if (this.power(p, 'alienoid')) this.gainEnergy(p, 1, '(Energy Siphon)');
+        if (this.power(p, 'gigazaur') && !this.inTokyo(p) && p.hp < p.maxHp) { this.log(`${p.name}'s Regenerating Scales:`); this.heal(p, 1); }
         if (p.poison > 0) {
           this.log(`${p.name} suffers ${p.poison} Poison damage.`);
           this.damage(p, p.poison, { attack: false, source: null });
@@ -361,6 +390,12 @@ export class Game {
    */
   damage(p, n, { source = null, attack = true } = {}, after = () => {}) {
     if (n <= 0 || !p.alive) return after(0);
+    if (attack && this.power(p, 'kraken') && this.turn && !this.turn.inkUsed[p.id]) {
+      this.turn.inkUsed[p.id] = true;
+      n -= 1;
+      this.log(`${p.name}'s Ink Cloud absorbs 1 damage.`);
+      if (n <= 0) return after(0);
+    }
     if (this.has(p, 'armor_plating') && n === 1) {
       this.log(`${p.name}'s Armor Plating ignores 1 damage.`);
       return after(0);
@@ -718,6 +753,7 @@ export class Game {
     if (attacking) {
       t.attacked = true;
       if (this.has(p, 'spiked_tail')) dmg += 1;
+      if (this.power(p, 'meka_dragon') && !this.inTokyo(p)) { dmg += 1; this.log(`${p.name}'s Rocket Punch adds 1 damage.`); }
       if (this.has(p, 'alpha_monster')) this.gainVp(p, 1, '(Alpha Monster)');
     }
     if (this.has(p, 'acid_attack')) dmg += 1;
@@ -938,6 +974,7 @@ export class Game {
       hostId: this.hostId,
       winner: this.winner,
       endedBy: this.endedBy,
+      options: { ...this.options },
       bayActive: this.bayActive,
       tokyo: { ...this.tokyo },
       deckSize: this.deck.length,

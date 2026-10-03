@@ -433,3 +433,105 @@ test('host can end the game early; others cannot', () => {
   assert.equal(g.endedBy, 'host');
   assert.equal(g.winner, null);
 });
+
+// ------------------------------------------------------------ Game Plus: monster powers
+
+function plusGame(n = 6) {
+  const g = new Game('PLUS', { rng: () => 0 });
+  const monsters = ['king', 'gigazaur', 'cyber_bunny', 'kraken', 'alienoid', 'meka_dragon'];
+  for (let i = 0; i < n; i++) g.addPlayer(`p${i}`, `P${i}`, monsters[i]);
+  g.setOptions('p0', { powers: true });
+  g.start('p0');
+  return g;
+}
+const byMonster = (g, id) => g.players.find(p => p.monster === id);
+
+test('Game Plus option: host only, lobby only, off by default', () => {
+  const g = new Game('OPTS');
+  g.addPlayer('a', 'Ann', 'king');
+  g.addPlayer('b', 'Bob', 'kraken');
+  assert.equal(g.options.powers, false);
+  assert.throws(() => g.setOptions('b', { powers: true }), /Only the host/);
+  g.setOptions('a', { powers: true });
+  assert.equal(g.publicState().options.powers, true);
+  g.start('a');
+  assert.throws(() => g.setOptions('a', { powers: false }), /before the game starts/);
+});
+
+test('powers do nothing when Game Plus is off', () => {
+  const g = makeGame(3);
+  const bunny = byMonster(g, 'cyber_bunny');
+  g.startTurn(bunny.id);
+  assert.equal(g.turn.rollsLeft, 3);
+});
+
+test('Cyber Bunny: one extra reroll', () => {
+  const g = plusGame();
+  g.startTurn(byMonster(g, 'cyber_bunny').id);
+  assert.equal(g.turn.rollsLeft, 4);
+  g.startTurn(byMonster(g, 'king').id);
+  assert.equal(g.turn.rollsLeft, 3);
+});
+
+test('The King: extra star when starting the turn in Tokyo', () => {
+  const g = plusGame();
+  const king = byMonster(g, 'king');
+  g.tokyo.city = king.id;
+  g.startTurn(king.id);
+  assert.equal(king.vp, 3);
+});
+
+test('Alienoid gains energy and Gigazaur heals at end of turn', () => {
+  const g = plusGame();
+  const alien = byMonster(g, 'alienoid');
+  g.startTurn(alien.id);
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(alien.id, { type: 'endTurn' });
+  assert.equal(alien.energy, 1);
+  const giga = byMonster(g, 'gigazaur');
+  giga.hp = 7;
+  g.startTurn(giga.id);
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(giga.id, { type: 'endTurn' });
+  assert.equal(giga.hp, 8);
+  // not while in Tokyo
+  g.tokyo.city = giga.id;
+  g.startTurn(giga.id);
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(giga.id, { type: 'endTurn' });
+  assert.equal(giga.hp, 8);
+});
+
+test('Kraken: Ink Cloud soaks 1 damage from the first attack each turn', () => {
+  const g = plusGame();
+  const kraken = byMonster(g, 'kraken');
+  const king = byMonster(g, 'king');
+  g.tokyo.city = kraken.id;
+  g.startTurn(king.id);
+  forceDice(g, ['claw', 'claw', 'claw', '1', '2', '3']);
+  assert.equal(kraken.hp, 8, '3 claws minus 1 for Ink Cloud');
+  g.act(kraken.id, { type: 'yield', yes: false });
+  // card damage is not an attack, so no Ink Cloud
+  g.shop = ['flame_thrower', 'heal', 'corner_store'];
+  king.energy = 3;
+  g.act(king.id, { type: 'buy', index: 0 });
+  assert.equal(kraken.hp, 6);
+});
+
+test('Meka Dragon: +1 damage when attacking from outside Tokyo only', () => {
+  const g = plusGame();
+  const meka = byMonster(g, 'meka_dragon');
+  const king = byMonster(g, 'king');
+  g.tokyo.city = king.id;
+  g.startTurn(meka.id);
+  forceDice(g, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(king.hp, 8);
+  g.act(king.id, { type: 'yield', yes: true });
+  assert.equal(g.tokyo.city, meka.id);
+  g.act(meka.id, { type: 'endTurn' });
+  // now attacking from inside Tokyo: no bonus
+  king.hp = 10;
+  g.startTurn(meka.id);
+  forceDice(g, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(king.hp, 9);
+});

@@ -204,6 +204,12 @@ function handle(ws, msg) {
       broadcast(ws.room);
       return;
     }
+    case 'setOptions': {
+      if (!ws.room) throw new GameError('You are not in a game.');
+      ws.room.game.setOptions(ws.playerId, msg.options || {});
+      broadcast(ws.room);
+      return;
+    }
     case 'action': {
       if (!ws.room) throw new GameError('You are not in a game.');
       ws.room.game.act(ws.playerId, msg.action);
