@@ -982,6 +982,38 @@ export class Game {
     this.removeFromPlay(target, `${target.name} is removed from the game by the host.`);
   }
 
+  // ------------------------------------------------------- persistence
+  /** True when nothing is mid-resolution: safe to snapshot. */
+  isQuiescent() { return this.steps.length === 0 && this.decisions.length === 0; }
+
+  /** Plain-data snapshot of the whole game (only meaningful when quiescent). */
+  toJSON() {
+    return {
+      v: 1,
+      code: this.code, phase: this.phase, hostId: this.hostId, winner: this.winner, endedBy: this.endedBy,
+      options: { ...this.options }, bayActive: this.bayActive, tokyo: { ...this.tokyo },
+      deck: [...this.deck], discard: [...this.discard], shop: [...this.shop],
+      players: this.players.map(p => ({ ...p })),
+      turn: this.turn ? JSON.parse(JSON.stringify(this.turn)) : null,
+      logs: this.logs.slice(-200), seq: this.seq, nextDecisionId: this.nextDecisionId,
+      createdAt: this.createdAt, updatedAt: this.updatedAt,
+    };
+  }
+
+  /** Rebuild a game from toJSON() output. Players come back marked disconnected. */
+  static fromJSON(d, opts = {}) {
+    const g = new Game(d.code, opts);
+    g.phase = d.phase; g.hostId = d.hostId; g.winner = d.winner; g.endedBy = d.endedBy || null;
+    g.options = { ...DEFAULT_OPTIONS, ...(d.options || {}) };
+    g.bayActive = !!d.bayActive; g.tokyo = { city: null, bay: null, ...(d.tokyo || {}) };
+    g.deck = [...(d.deck || [])]; g.discard = [...(d.discard || [])]; g.shop = [...(d.shop || [])];
+    g.players = (d.players || []).map(p => ({ ...p, connected: false }));
+    g.turn = d.turn ? JSON.parse(JSON.stringify(d.turn)) : null;
+    g.logs = [...(d.logs || [])]; g.seq = d.seq || 0; g.nextDecisionId = d.nextDecisionId || 1;
+    g.createdAt = d.createdAt || Date.now(); g.updatedAt = d.updatedAt || Date.now();
+    return g;
+  }
+
   // ------------------------------------------------------------- state
   publicState() {
     return {
