@@ -35,6 +35,9 @@
   let dismissedGameOver = false;
   let reconnectDelay = 1000;
   let autoModal = null;     // which automatic modal is open: 'yield' | 'decision:<id>' | 'gameover' | null
+  let lastSeq = -1;         // last batch of engine events we animated
+  let lastBuyKey = '';      // detects the moment my buy step starts (auto-open the shop sheet on phones)
+  const isMobile = () => window.matchMedia('(max-width: 720px), (max-height: 540px)').matches;
 
   const FALLBACK_MONSTERS = [
     { id: 'king', image: '/img/king.webp', thumb: '/img/king-thumb.webp', name: 'The King', emoji: '🦍', color: '#d08a3c' },
@@ -243,6 +246,20 @@
   $('#btn-end-game').addEventListener('click', () => {
     confirmModal('End the game for everyone? This cannot be undone.', () => act({ type: 'endGame' }), 'End game');
   });
+  $('#btn-menu').addEventListener('click', () => {
+    const isHost = state && state.hostId === me.playerId && state.phase === 'playing';
+    openModal('pick', el('h2', {}, 'Menu'),
+      el('div', { class: 'pick-list' },
+        el('button', { class: 'btn big', onclick: () => { closeModal(); $('#rules').hidden = false; } }, '📖 How to play'),
+        el('button', { class: 'btn big', onclick: () => { closeModal(); $('#btn-leave-game').click(); } }, '🚪 Leave game'),
+        isHost ? el('button', { class: 'btn big danger-outline', onclick: () => { closeModal(); $('#btn-end-game').click(); } }, '🛑 End game for everyone') : null),
+      el('div', { class: 'action-row' }, el('button', { class: 'btn', onclick: closeModal }, 'Close')));
+  });
+  const closeSheets = () => document.body.classList.remove('shop-open', 'log-open');
+  $('#btn-shop').addEventListener('click', () => { const open = document.body.classList.contains('shop-open'); closeSheets(); if (!open) document.body.classList.add('shop-open'); });
+  $('#btn-log').addEventListener('click', () => { const open = document.body.classList.contains('log-open'); closeSheets(); if (!open) { document.body.classList.add('log-open'); const l = $('#log'); l.scrollTop = l.scrollHeight; } });
+  $('#sheet-backdrop').addEventListener('click', closeSheets);
+  document.querySelector('.log-col .sheet-close').addEventListener('click', closeSheets);
 
   function render() {
     if (!state || !me) return;
@@ -263,6 +280,22 @@
     renderShop(t, cur, mine, self, d);
     renderLog();
     renderModal(t, cur, self, d);
+    syncSheets(t, mine, self, d);
+    playEvents();
+  }
+
+  /** Phone sheets: open the shop when my buy step starts, close it when it ends. */
+  function syncSheets(t, mine, self, d) {
+    const myBuy = mine && t.step === 'buy' && state.phase === 'playing' && !d;
+    const shopBtn = $('#btn-shop');
+    shopBtn.textContent = myBuy ? `🛒 Buy cards (${self.energy}⚡)` : '🛒 Shop';
+    shopBtn.classList.toggle('primary', myBuy);
+    if (isMobile()) {
+      if (myBuy && !lastBuyKey) document.body.classList.add('shop-open');
+      if (!myBuy && lastBuyKey) document.body.classList.remove('shop-open');
+    }
+    lastBuyKey = myBuy ? 'buy' : '';
+    if (state.phase === 'ended') closeSheets();
   }
 
   function renderBanner(t, cur, mine, self, d) {
@@ -295,7 +328,7 @@
     box.innerHTML = '';
     const slot = (title, pid) => {
       const p = pid ? byId(pid) : null;
-      const s = el('div', { class: 'tokyo-slot' + (p ? ' occupied' : '') }, el('h4', {}, title));
+      const s = el('div', { class: 'tokyo-slot' + (p ? ' occupied' : ''), 'data-pid': p ? p.id : null }, el('h4', {}, title));
       if (p) {
         s.append(art(monster(p.monster), 'art tokyo-art'), el('div', { class: 'who' }, p.name));
         if (p.id === me.playerId) s.append(el('div', { class: 'you-tag' }, 'that\'s you'));
@@ -317,11 +350,10 @@
     for (const p of state.players) {
       const m = monster(p.monster);
       const inTokyo = state.tokyo.city === p.id || state.tokyo.bay === p.id;
-      const prev = prevState && prevState.players.find(x => x.id === p.id);
-      const hit = prev && prev.hp > p.hp;
       const card = el('div', {
-        class: 'pcard' + (p.id === t.playerId ? ' current' : '') + (p.alive ? '' : ' dead') + (hit ? ' hit' : ''),
+        class: 'pcard' + (p.id === t.playerId ? ' current' : '') + (p.alive ? '' : ' dead'),
         style: `--mc:${m.color}`,
+        'data-pid': p.id,
       });
       if (p.id === me.playerId) card.append(el('span', { class: 'you-tag' }, 'YOU'));
       card.append(el('div', { class: 'head' },
@@ -484,7 +516,8 @@
   function renderShop(t, cur, mine, self, d) {
     const box = $('#shop-panel');
     box.innerHTML = '';
-    box.append(el('h3', {}, `Cards for sale · ${state.deckSize} in deck`));
+    box.append(el('div', { class: 'sheet-head' }, el('h3', {}, `Cards for sale · ${state.deckSize} in deck`),
+      el('button', { class: 'btn small mobile-only sheet-close', onclick: closeSheets }, 'Close')));
     const canBuy = mine && t.step === 'buy' && state.phase === 'playing' && !d;
     const discount = hasPower(self, 'alien_metabolism') ? 1 : 0;
     const grid = el('div', { class: 'shop' });
@@ -523,6 +556,54 @@
       box.append(el('div', { class: cls }, l.text));
     }
     if (atBottom) box.scrollTop = box.scrollHeight;
+    const ticker = $('#ticker');
+    ticker.innerHTML = '';
+    for (const l of state.logs.slice(-3)) ticker.append(el('div', {}, l.text));
+  }
+
+  // ------------------------------------------------------------ attack effects
+  const VIA_ICON = { claw: '🐾', fire: '🔥', card: '💥', acid: '🧪', poison: '☠️', bite: '🦷' };
+  const BLOCK_ICON = { wings: '🪽', armor: '🛡️', camouflage: '🌫️', ink: '🌊' };
+
+  /** Play the engine's events for this state update: lunges, slashes, damage numbers, blocks, KOs. */
+  function playEvents() {
+    if (!state.events || state.seq === lastSeq) return;
+    lastSeq = state.seq;
+    const targetsOf = (pid) => [...document.querySelectorAll(`.pcard[data-pid="${pid}"], .tokyo-slot[data-pid="${pid}"]`)];
+    let delay = 0;
+    for (const ev of state.events) {
+      const at = delay;
+      setTimeout(() => {
+        if (ev.type === 'damage') {
+          for (const node of targetsOf(ev.from || '')) if (node.classList.contains('pcard')) node.classList.add('lunge');
+          for (const node of targetsOf(ev.to)) {
+            node.classList.add('hit', 'flash');
+            const fx = el('div', { class: 'fx' });
+            if (ev.via === 'claw') fx.append(el('div', { class: 'fx-slash' }), el('div', { class: 'fx-slash second' }));
+            fx.append(el('div', { class: 'fx-icon' }, VIA_ICON[ev.via] || '💥'));
+            if (node.classList.contains('pcard')) fx.append(el('div', { class: 'fx-num' }, `-${ev.amount}`));
+            node.append(fx);
+            setTimeout(() => { fx.remove(); node.classList.remove('hit', 'flash'); }, 1200);
+          }
+          for (const node of targetsOf(ev.from || '')) setTimeout(() => node.classList.remove('lunge'), 700);
+        } else if (ev.type === 'blocked') {
+          for (const node of targetsOf(ev.to)) {
+            if (!node.classList.contains('pcard')) continue;
+            const fx = el('div', { class: 'fx' }, el('div', { class: 'fx-shield' }, el('span', { class: 'big' }, BLOCK_ICON[ev.by] || '🛡️'), 'BLOCKED'));
+            node.append(fx);
+            setTimeout(() => fx.remove(), 1000);
+          }
+        } else if (ev.type === 'ko') {
+          for (const node of targetsOf(ev.to)) {
+            if (!node.classList.contains('pcard')) continue;
+            const fx = el('div', { class: 'fx' }, el('div', { class: 'fx-ko' }, 'K.O.'));
+            node.append(fx);
+            setTimeout(() => fx.remove(), 1500);
+          }
+        }
+      }, at);
+      delay += ev.type === 'damage' ? 160 : 60;
+    }
   }
 
   // ------------------------------------------------------------ modals

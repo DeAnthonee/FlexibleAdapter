@@ -535,3 +535,50 @@ test('Meka Dragon: +1 damage when attacking from outside Tokyo only', () => {
   forceDice(g, ['claw', '1', '2', '3', '1', '2']);
   assert.equal(king.hp, 9);
 });
+
+// ------------------------------------------------------------ events for client animations
+
+test('events: each action starts a fresh batch with a new seq', () => {
+  const g = makeGame(2);
+  const s0 = g.publicState().seq;
+  g.act(cur(g).id, { type: 'roll' });
+  const s1 = g.publicState().seq;
+  assert.ok(s1 > s0);
+  assert.deepEqual(g.publicState().events, []);
+});
+
+test('events: a claw attack reports attacker, target, amount and kind', () => {
+  const g = makeGame(2);
+  const a = cur(g);
+  const b = g.players.find(x => x.id !== a.id);
+  forceDice(g, ['claw', '1', '1', '2', '2', '3']); // a enters Tokyo
+  g.act(a.id, { type: 'endTurn' });
+  forceDice(g, ['claw', 'claw', '1', '2', '3', 'energy']); // b hits a
+  const ev = g.publicState().events;
+  assert.deepEqual(ev, [{ type: 'damage', from: b.id, to: a.id, amount: 2, via: 'claw' }]);
+});
+
+test('events: card damage, blocks and knockouts are reported', () => {
+  const g = makeGame(3);
+  const p = cur(g);
+  const [x, y] = g.players.filter(o => o.id !== p.id);
+  x.cards.push('armor_plating');
+  y.hp = 2;
+  g.shop = ['flame_thrower', 'corner_store', 'heal'];
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  p.energy = 3;
+  g.act(p.id, { type: 'buy', index: 0 });
+  const ev = g.publicState().events;
+  assert.deepEqual(ev.map(e => e.type), ['damage', 'damage', 'ko']);
+  assert.equal(ev[0].via, 'card');
+  assert.equal(ev[2].to, y.id);
+  // Armor Plating only blocks damage of exactly 1
+  x.hp = 10;
+  g.act(p.id, { type: 'endTurn' });
+  const q = cur(g);
+  if (q.id === x.id) { forceDice(g, ['1', '2', '3', '1', '2', '3']); g.act(x.id, { type: 'endTurn' }); }
+  const atk = cur(g);
+  g.tokyo.city = x.id;
+  forceDice(g, ['claw', '1', '2', '3', '1', '2']);
+  assert.deepEqual(g.publicState().events, [{ type: 'blocked', from: atk.id, to: x.id, by: 'armor' }]);
+});

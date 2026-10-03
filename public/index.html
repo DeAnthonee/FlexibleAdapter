@@ -81,9 +81,10 @@
       <div id="turn-banner" class="turn-banner" aria-live="polite"></div>
       <div class="topbar-right">
         <span class="code-chip">Game <b id="game-code"></b></span>
-        <button id="btn-rules" class="btn small" type="button">Rules</button>
-        <button id="btn-leave-game" class="btn small" type="button">Leave</button>
-        <button id="btn-end-game" class="btn small danger-outline" type="button" hidden>End game</button>
+        <button id="btn-rules" class="btn small desktop-only" type="button">Rules</button>
+        <button id="btn-leave-game" class="btn small desktop-only" type="button">Leave</button>
+        <button id="btn-end-game" class="btn small danger-outline desktop-only" type="button" hidden>End game</button>
+        <button id="btn-menu" class="btn small mobile-only" type="button" aria-label="Menu">☰</button>
       </div>
     </header>
 
@@ -91,20 +92,26 @@
       <div class="board-col">
         <div id="tokyo" class="tokyo"></div>
         <div id="players" class="players"></div>
+        <div id="ticker" class="ticker mobile-only" aria-hidden="true"></div>
       </div>
 
       <div class="action-col">
         <div id="action-panel" class="panel"></div>
-        <div id="shop-panel" class="panel"></div>
+        <div id="mobile-bar" class="mobile-only">
+          <button id="btn-shop" class="btn" type="button">🛒 Shop</button>
+          <button id="btn-log" class="btn" type="button">📜 Log</button>
+        </div>
+        <div id="shop-panel" class="panel sheet"></div>
       </div>
 
-      <aside class="log-col">
+      <aside class="log-col sheet">
         <div class="panel log-panel">
-          <h3>Game log</h3>
+          <div class="sheet-head"><h3>Game log</h3><button class="btn small mobile-only sheet-close" type="button">Close</button></div>
           <div id="log" class="log"></div>
         </div>
       </aside>
     </main>
+    <div id="sheet-backdrop" class="sheet-backdrop"></div>
   </section>
 
   <!-- ===================== OVERLAYS ===================== -->
