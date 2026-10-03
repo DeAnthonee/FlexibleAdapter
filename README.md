@@ -92,6 +92,11 @@ npm test
   buttons pinned to the bottom, and the shop and log as slide-up sheets.
   Portrait and landscape both work; the shop opens by itself when it is
   your turn to buy.
+- Dice roll animation: dice enter one at a time, slide in, tumble through
+  random faces and land on their value. A full roll takes about 2 seconds.
+  Timings live in the `DICE_ANIM` block at the top of `public/app.js`.
+  Only rerolled dice animate on a reroll; a die changed by a card animates
+  alone. Roll buttons are disabled until the dice settle.
 - Attack animations on the boards: the attacker's board lunges, the target
   shakes with a claw slash (or fire, poison, card blast), a damage number
   floats up, blocks show a shield, and knockouts stamp "K.O.". The engine

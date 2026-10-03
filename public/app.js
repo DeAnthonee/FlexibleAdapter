@@ -6,6 +6,17 @@
   const FACES = ['1', '2', '3', 'heart', 'energy', 'claw'];
   const SESSION_KEY = 'kot.session';
 
+  // ---- Dice roll animation. Tune these to taste. ----
+  // Each die enters one after another: it slides in, flips through random faces,
+  // then lands on its real value with a small bounce.
+  const DICE_ANIM = {
+    totalMs: 2000,   // how long a full roll of 6 dice takes; each die gets totalMs / 6
+    slideMs: 140,    // the slide-in before a die starts tumbling
+    flips: 7,        // random faces shown before landing
+    landMs: 180,     // settle bounce at the end
+    rerollTotalMs: null, // set a number to give rerolls their own total; null = same per-die pace as a full roll
+  };
+
   const $ = (sel) => document.querySelector(sel);
   const el = (tag, attrs = {}, ...children) => {
     const n = document.createElement(tag);
@@ -32,6 +43,9 @@
   let kept = new Set();     // dice indices kept locally during rolling
   let tool = null;          // active die-changing card id
   let lastDiceKey = '';
+  let lastDiceMeta = null;  // { playerId, rollsLeft, faces[] } of the dice last shown, to pick which dice animate
+  let diceAnimating = false;
+  let diceAnimToken = 0;
   let dismissedGameOver = false;
   let reconnectDelay = 1000;
   let autoModal = null;     // which automatic modal is open: 'yield' | 'decision:<id>' | 'gameover' | null
@@ -133,6 +147,7 @@
       case 'state':
         prevState = state;
         state = msg.state;
+        diceAnimating = false; diceAnimToken++;
         if (state.monsters) monsters = state.monsters;
         render();
         break;
@@ -405,21 +420,80 @@
 
   function diceEl(dice, { interactive, animateKey, probe }) {
     const changed = animateKey !== lastDiceKey;
+    const t = state.turn;
+    // Which dice should animate? A fresh roll or reroll: every die that was not kept.
+    // A single changed die (Psychic Probe, Herd Culler, Stretchy, Plot Twist): just that one.
+    let toAnimate = [];
+    if (changed) {
+      const meta = lastDiceMeta;
+      const freshRoll = !meta || meta.playerId !== t.playerId || meta.rollsLeft !== t.rollsLeft || meta.faces.length !== dice.length;
+      toAnimate = dice.map((d, i) => i).filter(i => freshRoll ? !dice[i].kept : dice[i].face !== meta.faces[i]);
+    }
     const row = el('div', { class: 'dice' });
     dice.forEach((d, i) => {
       const isKept = interactive ? kept.has(i) : d.kept;
       row.append(el('div', {
-        class: `die ${d.face} ${isKept ? 'kept' : ''} ${interactive ? '' : 'static'} ${probe ? 'probe' : ''} ${changed && !isKept ? 'rolling' : ''}`,
+        class: `die ${d.face} ${isKept ? 'kept' : ''} ${interactive ? '' : 'static'} ${probe ? 'probe' : ''}`,
+        'data-face': d.face,
         role: interactive || probe ? 'button' : null,
         title: probe ? 'Psychic Probe: force a reroll of this die' : null,
-        onclick: interactive ? () => onDieClick(i) : probe ? () => confirmModal(`Use Psychic Probe to reroll this ${FACE[d.face]}?`, () => act({ type: 'probe', index: i }), 'Reroll it') : null,
+        onclick: interactive ? () => onDieClick(i) : probe ? () => { if (!diceAnimating) confirmModal(`Use Psychic Probe to reroll this ${FACE[d.face]}?`, () => act({ type: 'probe', index: i }), 'Reroll it'); } : null,
       }, FACE[d.face]));
     });
     lastDiceKey = animateKey;
+    lastDiceMeta = { playerId: t.playerId, rollsLeft: t.rollsLeft, faces: dice.map(d => d.face) };
+    if (toAnimate.length) animateDice(row, toAnimate, toAnimate.length === dice.length);
     return row;
   }
 
+  const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /** Roll the given dice one after another: slide in, tumble through random faces, land. */
+  function animateDice(row, indices, fullRoll) {
+    if (reducedMotion()) return;
+    const token = ++diceAnimToken;
+    diceAnimating = true;
+    const dies = [...row.children];
+    const perDie = (fullRoll || !DICE_ANIM.rerollTotalMs) ? DICE_ANIM.totalMs / 6 : DICE_ANIM.rerollTotalMs / Math.max(1, indices.length);
+    const flipMs = Math.max(30, (perDie - DICE_ANIM.slideMs - DICE_ANIM.landMs) / DICE_ANIM.flips);
+    const setFace = (die, face) => { die.className = die.className.replace(/\b(1|2|3|heart|energy|claw)\b/g, '').replace(/\s+/g, ' ') + ' ' + face; die.textContent = FACE[face]; };
+    const alive = () => token === diceAnimToken && row.isConnected;
+    indices.forEach(i => { dies[i].classList.add('pending'); dies[i].textContent = ''; });
+    indices.forEach((i, k) => {
+      const die = dies[i];
+      const final = die.dataset.face;
+      const start = k * perDie;
+      setTimeout(() => {
+        if (!alive()) return;
+        die.classList.remove('pending');
+        die.classList.add('sliding');
+        setTimeout(() => {
+          if (!alive()) return;
+          die.classList.remove('sliding');
+          die.classList.add('tumbling');
+          let n = 0;
+          const flip = () => {
+            if (!alive()) return;
+            if (n++ < DICE_ANIM.flips) {
+              let f; do { f = FACES[Math.floor(Math.random() * 6)]; } while (f === die.dataset.last);
+              die.dataset.last = f;
+              setFace(die, f);
+              setTimeout(flip, flipMs);
+            } else {
+              die.classList.remove('tumbling');
+              setFace(die, final);
+              die.classList.add('landed');
+              if (k === indices.length - 1) setTimeout(() => { if (!alive()) return; diceAnimating = false; render(); }, DICE_ANIM.landMs);
+            }
+          };
+          flip();
+        }, DICE_ANIM.slideMs);
+      }, start);
+    });
+  }
+
   function onDieClick(i) {
+    if (diceAnimating) return;
     if (tool) {
       const via = tool; tool = null;
       if (via === 'herd_culler') act({ type: 'setDie', index: i, face: '1', via });
@@ -463,13 +537,13 @@
         if (self.cards.some(c => c.id === 'mimic')) box.append(mimicTool(self));
       } else {
         box.append(diceEl(t.dice, { interactive: true, animateKey: diceKey }));
-        box.append(el('p', { class: 'status-line' }, tool ? `Click the die to change (${cardName(tool)}).` : 'Click dice to keep them, then reroll the rest.'));
+        box.append(el('p', { class: 'status-line' }, diceAnimating ? 'Rolling…' : tool ? `Click the die to change (${cardName(tool)}).` : 'Click dice to keep them, then reroll the rest.'));
         const allKept = kept.size === t.dice.length;
         const canBgd = hasPower(self, 'background_dweller') && t.dice.some((x, i) => x.face === '3' && !kept.has(i));
         const rerollLabel = t.rollsLeft > 0 ? `Reroll (${t.rollsLeft} left)` : canBgd ? 'Reroll 3s (Background Dweller)' : 'No rerolls left';
         box.append(el('div', { class: 'action-row center' },
-          el('button', { class: 'btn big', disabled: (t.rollsLeft <= 0 && !canBgd) || allKept, onclick: () => act({ type: 'roll', keep: [...kept] }) }, rerollLabel),
-          el('button', { class: 'btn primary big', onclick: () => { kept.clear(); act({ type: 'stopRolling' }); } }, 'Stop & resolve ✔'),
+          el('button', { class: 'btn big', disabled: diceAnimating || (t.rollsLeft <= 0 && !canBgd) || allKept, onclick: () => act({ type: 'roll', keep: [...kept] }) }, rerollLabel),
+          el('button', { class: 'btn primary big', disabled: diceAnimating, onclick: () => { kept.clear(); act({ type: 'stopRolling' }); } }, 'Stop & resolve ✔'),
         ));
         const tools = [];
         if (hasPower(self, 'herd_culler') && !t.usedHerdCuller) tools.push(toolBtn('herd_culler', 'Herd Culler: set a die to 1'));
@@ -492,7 +566,7 @@
   }
 
   const cardName = (id) => ({ herd_culler: 'Herd Culler', stretchy: 'Stretchy', plot_twist: 'Plot Twist' })[id] || id;
-  const toolBtn = (id, label) => el('button', { class: 'btn small' + (tool === id ? ' primary' : ''), onclick: () => { tool = tool === id ? null : id; render(); } }, label);
+  const toolBtn = (id, label) => el('button', { class: 'btn small' + (tool === id ? ' primary' : ''), disabled: diceAnimating, onclick: () => { tool = tool === id ? null : id; render(); } }, label);
 
   function mimicTool(self) {
     const current = self.mimicTarget ? `Mimic is copying ${self.mimicTarget.name}.` : 'Mimic is not copying anything yet.';
