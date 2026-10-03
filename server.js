@@ -21,6 +21,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Game, GameError, newGameCode, MONSTERS } from './game/engine.js';
+import { chooseAction, botDelayMs } from './game/bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -109,6 +110,38 @@ function broadcast(room) {
   const msg = JSON.stringify({ type: 'state', state: room.game.publicState() });
   for (const set of room.sockets.values()) for (const ws of set) if (ws.readyState === ws.OPEN) ws.send(msg);
   snapshotRoom(room);
+  driveBots(room);
+}
+
+// ------------------------------------------------------- computer players
+/** If a bot has to act in this room, schedule its move (one timer per room). */
+function driveBots(room) {
+  const game = room.game;
+  if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
+  if (game.phase !== 'playing') return;
+  const who = game.pendingActor();
+  if (!who) return;
+  const p = game.player(who.playerId);
+  if (!p || !p.bot) return;
+  const seq = game.seq;
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
+    if (!games.has(game.code) || game.seq !== seq) return; // something else happened meanwhile
+    let action;
+    try {
+      action = chooseAction(game, p.id);
+      if (!action) return;
+      game.act(p.id, action);
+      game.touch();
+    } catch (err) {
+      console.error(`bot ${p.name} failed (${action && action.type}): ${err.message}`);
+      // Never let a stuck bot freeze a table: fall back to the safest legal move.
+      try { game.act(p.id, who.kind === 'roll' && game.turn.rolled ? { type: 'stopRolling' } : who.kind === 'buy' ? { type: 'endTurn' } : who.kind === 'yield' ? { type: 'yield', yes: true } : { type: 'decide', answer: undefined }); }
+      catch (e2) { console.error(`bot ${p.name} fallback failed: ${e2.message}`); return; }
+    }
+    broadcast(room);
+  }, botDelayMs(game));
+  room.botTimer.unref && room.botTimer.unref();
 }
 
 function send(ws, obj) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj)); }
@@ -333,6 +366,18 @@ function handle(ws, msg) {
       broadcast(ws.room);
       return;
     }
+    case 'addBot': {
+      if (!ws.room) throw new GameError('You are not in a game.');
+      ws.room.game.addBot(ws.playerId);
+      broadcast(ws.room);
+      return;
+    }
+    case 'removeBot': {
+      if (!ws.room) throw new GameError('You are not in a game.');
+      ws.room.game.removeBot(ws.playerId, msg.botId);
+      broadcast(ws.room);
+      return;
+    }
     case 'action': {
       if (!ws.room) throw new GameError('You are not in a game.');
       ws.room.game.act(ws.playerId, msg.action);
@@ -358,6 +403,7 @@ setInterval(() => {
 }, 30 * 1000).unref();
 
 const restored = loadSnapshot();
+for (const room of games.values()) driveBots(room); // bots resume after a restart
 console.log(SNAPSHOT_FILE ? `Persistence: ${SNAPSHOT_FILE} (${restored} game(s) restored)` : 'Persistence: off');
 console.log(`Monsters: ${MONSTERS.map(m => m.name).join(', ')}`);
 server.listen(PORT, () => {

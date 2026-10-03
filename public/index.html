@@ -39,6 +39,7 @@
 
         <div class="home-actions">
           <button id="btn-create" class="btn primary big" type="button">Create game</button>
+          <button id="btn-practice" class="btn big" type="button" title="Create a game with two computer players already seated">🤖 Practice vs computers</button>
           <div class="join-row">
             <input id="join-code" maxlength="4" placeholder="CODE" class="code-input" autocapitalize="characters" spellcheck="false" aria-label="Game code">
             <button id="btn-join" class="btn big" type="button">Join game</button>
@@ -58,6 +59,10 @@
       <div id="lobby-code" class="big-code">----</div>
       <button id="btn-copy-link" class="btn small" type="button">Copy invite link</button>
       <ul id="lobby-players" class="lobby-players"></ul>
+      <div id="bot-row" class="bot-row" hidden>
+        <button id="btn-add-bot" class="btn small" type="button">🤖 Add computer player</button>
+        <span class="hint" style="margin:0">For testing: computers play the other monsters.</span>
+      </div>
       <div class="option-box">
         <label class="toggle" for="opt-powers">
           <input type="checkbox" id="opt-powers">

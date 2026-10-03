@@ -123,3 +123,21 @@ test('oversized and flooding messages are rejected without crashing the server',
     c.close();
   } finally { await stopServer(s); }
 });
+
+test('computer players act on their own after the host adds them', async () => {
+  const s = await startServer({ DATA_DIR: 'none', BOT_DELAY_MS: '20', BOT_ROLL_DELAY_MS: '20' });
+  try {
+    const h = await new Client(s.port).open();
+    h.send({ type: 'create', name: 'Host', monster: 'king' });
+    const joined = await h.next('joined');
+    h.send({ type: 'addBot' });
+    h.send({ type: 'addBot' });
+    const lobby = await h.waitState(st => st.players.length === 3);
+    assert.equal(lobby.players.filter(p => p.bot).length, 2);
+    h.send({ type: 'start' });
+    // bots take their turns by themselves; wait until it is the human's turn or the game moved on a lot
+    const st = await h.waitState(x => x.phase === 'playing' && x.turn && x.turn.playerId === joined.playerId && x.logs.some(l => /Bot .* rolls/.test(l.text)));
+    assert.ok(st.logs.some(l => /Bot .* rolls/.test(l.text)), 'a bot rolled dice');
+    h.close();
+  } finally { await stopServer(s); }
+});

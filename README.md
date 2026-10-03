@@ -51,6 +51,8 @@ Environment variables:
 | `PORT`      | `3000`    | Listen port; binds all interfaces. |
 | `DATA_DIR`  | `./data`  | Folder for the snapshot file; must be writable. `none` disables persistence. |
 | `MAX_GAMES` | `500`     | Cap on simultaneous games. |
+| `BOT_DELAY_MS` | `900`  | Pause before a computer player acts. |
+| `BOT_ROLL_DELAY_MS` | `2400` | Pause after a computer player rolls, so the dice animation can finish. |
 
 Stop the server with SIGTERM (what launchd, systemd and pm2 send) so the final
 snapshot is written. Each connection is limited to 16 KB messages and a few
@@ -71,6 +73,7 @@ node scripts/loadtest.js ws://localhost:3000 200 4   # 200 two-player games, 4 t
 server.js            HTTP static server + WebSocket game server
 game/engine.js       Rules engine (pure logic, no networking)
 game/cards.js        The card deck and card effects
+game/bot.js          Computer player strategy for practice games
 public/index.html    Create/join screen, waiting room, game screen
 public/app.js        Browser client
 public/style.css     Styling
@@ -126,6 +129,17 @@ npm test
   floats up, blocks show a shield, and knockouts stamp "K.O.". The engine
   reports these as events with each update, so every player sees them.
   Honours the reduced-motion setting.
+
+### Practice mode (computer players)
+
+For testing on your own, the host can add computer players in the waiting room
+(**Add computer player**), or use **Practice vs computers** on the home screen
+to start a lobby with two bots seated. Bots play a simple strategy: keep claws
+when someone is in Tokyo, keep hearts when hurt, chase triples, yield when low,
+use Wings when low, buy a card they can afford, end the turn. They pause so you
+can watch the dice and attack animations (`BOT_DELAY_MS`, default 900, and
+`BOT_ROLL_DELAY_MS`, default 2400). Bots run on the server, survive restarts,
+and never count as disconnected.
 
 ### Game Plus (optional)
 
