@@ -79,10 +79,10 @@ test('a running game survives a server restart and players rejoin with their tok
     bJoined = await b.next('joined');
     await a.waitState(st => st.players.length === 2);
     a.send({ type: 'start' });
-    const st = await a.waitState(x => x.phase === 'playing');
+    const st = await a.waitState(x => x.phase === 'playing' && x.turn);
     const roller = st.turn.playerId === aJoined.playerId ? a : b;
     roller.send({ type: 'action', action: { type: 'roll' } });
-    const rolled = await roller.waitState(x => x.turn.rolled);
+    const rolled = await roller.waitState(x => x.phase === 'playing' && x.turn && x.turn.rolled);
     diceBefore = rolled.turn.dice.map(d => d.face);
     // give the 5 s snapshot timer no chance: SIGTERM saves synchronously
     a.close(); b.close();

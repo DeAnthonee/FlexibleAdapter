@@ -358,8 +358,8 @@ setInterval(() => {
 }, 30 * 1000).unref();
 
 const restored = loadSnapshot();
+console.log(SNAPSHOT_FILE ? `Persistence: ${SNAPSHOT_FILE} (${restored} game(s) restored)` : 'Persistence: off');
+console.log(`Monsters: ${MONSTERS.map(m => m.name).join(', ')}`);
 server.listen(PORT, () => {
   console.log(`King of Tokyo Online v${VERSION} listening on http://localhost:${PORT}`);
-  console.log(`Monsters: ${MONSTERS.map(m => m.name).join(', ')}`);
-  console.log(SNAPSHOT_FILE ? `Persistence: ${SNAPSHOT_FILE} (${restored} game(s) restored)` : 'Persistence: off');
 });
