@@ -38,10 +38,12 @@ class Client {
   }
   async open() { await once(this.ws, 'open'); return this; }
   send(obj) { this.ws.send(JSON.stringify(obj)); }
+  /** Next message of `type`; with no type, the next message other than the version greeting. */
   next(type) {
+    const wanted = (m) => (type ? m.type === type : m.type !== 'hello');
     return new Promise((resolve) => {
-      const pick = (m) => { if (!type || m.type === type) resolve(m); else this.waiters.unshift(pick); };
-      const i = this.queue.findIndex(m => !type || m.type === type);
+      const pick = (m) => { if (wanted(m)) resolve(m); else this.waiters.unshift(pick); };
+      const i = this.queue.findIndex(wanted);
       if (i >= 0) resolve(this.queue.splice(i, 1)[0]); else this.waiters.push(pick);
     });
   }
@@ -169,6 +171,17 @@ test('a waiting-room player who drops offline keeps the seat (and host) during t
     assert.equal(gone.players[0].name, 'Guest');
     assert.equal(gone.hostId, gone.players[0].id, 'host passed to the remaining player');
     g.close();
+  } finally { await stopServer(s); }
+});
+
+test('every connection is greeted with the running version', async () => {
+  const s = await startServer({ DATA_DIR: 'none' });
+  try {
+    const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+    const c = await new Client(s.port).open();
+    const hello = await c.next('hello');
+    assert.equal(hello.version, version);
+    c.close();
   } finally { await stopServer(s); }
 });
 

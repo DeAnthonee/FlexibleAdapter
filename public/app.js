@@ -101,13 +101,28 @@
   /** Local asset URL with the version stamped in, so CDN/browser caches never hand out an old file. */
   const versioned = (src) => (appVersion && src.startsWith('/') ? `${src}?v=${encodeURIComponent(appVersion)}` : src);
   /** After a deploy the server is newer than this page: offer a reload (seats survive it). */
+  /**
+   * The server reports its version on connect and with every update. When a newer build is
+   * live this page reloads itself (the seat is kept through the saved session token). A page
+   * that already reloaded for this version and still sees a mismatch shows a chip instead, so
+   * a misconfigured proxy can never cause a reload loop.
+   */
+  const RELOAD_KEY = 'kot.reloadedFor';
   function noticeServerVersion(v) {
     if (!v || !appVersion || v === appVersion) return;
+    let already = null;
+    try { already = sessionStorage.getItem(RELOAD_KEY); } catch {}
+    if (already !== v) {
+      try { sessionStorage.setItem(RELOAD_KEY, v); } catch {}
+      toast(`Updating to v${v}…`, 'info');
+      setTimeout(() => location.reload(), 300);
+      return;
+    }
     const chip = $('#update-chip');
     chip.textContent = `⬆️ New version v${v} is live. Tap to reload.`;
     chip.hidden = false;
   }
-  $('#update-chip').addEventListener('click', () => location.reload());
+  $('#update-chip').addEventListener('click', () => { try { sessionStorage.removeItem(RELOAD_KEY); } catch {} location.reload(); });
 
   // ------------------------------------------------------------ toast
   let toastTimer = null;
@@ -163,6 +178,9 @@
 
   function onMessage(msg) {
     switch (msg.type) {
+      case 'hello':
+        noticeServerVersion(msg.version);
+        break;
       case 'joined':
         me = { code: msg.code, playerId: msg.playerId, token: msg.token };
         saveSession(me);
