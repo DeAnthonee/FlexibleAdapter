@@ -228,28 +228,45 @@ function snapshotRoom(room) {
 
 function markDirty() { dirty = true; }
 
+/**
+ * Build the snapshot file. Returns the JSON plus an account of every room: which were
+ * written and which were skipped and why, so the shutdown log can say exactly what was kept.
+ */
 function serializeAll() {
   const rooms = [];
-  for (const room of games.values()) {
-    if (!room.snap || room.snap.game.phase === 'ended') continue;
+  const skipped = [];
+  const stale = [];
+  for (const [code, room] of games) {
+    if (!room.snap) { skipped.push(`${code}: never reached a settled state`); continue; }
+    if (room.snap.game.phase === 'ended') { skipped.push(`${code}: finished`); continue; }
+    if (!room.game.isQuiescent()) stale.push(code); // saved as of its last settled state
     rooms.push(room.snap);
   }
-  return JSON.stringify({ v: 1, savedAt: Date.now(), rooms });
+  return { data: JSON.stringify({ v: 1, savedAt: Date.now(), rooms }), saved: rooms.length, skipped, stale };
+}
+
+/** Human-readable account of a serializeAll() result, for the shutdown log. */
+function describeSave({ saved, skipped, stale }) {
+  let s = `saved ${saved} game(s)`;
+  if (stale.length) s += ` (${stale.join(', ')} as of the last settled state)`;
+  if (skipped.length) s += `; skipped ${skipped.length} (${skipped.join('; ')})`;
+  return s;
 }
 
 function saveSnapshot({ sync = false } = {}) {
-  if (!SNAPSHOT_FILE) return;
+  if (!SNAPSHOT_FILE) return null;
   dirty = false;
-  const data = serializeAll();
+  const result = serializeAll();
+  const data = result.data;
   const tmp = SNAPSHOT_FILE + '.tmp';
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     if (sync) {
       fs.writeFileSync(tmp, data);
       fs.renameSync(tmp, SNAPSHOT_FILE);
-      return;
+      return result;
     }
-    if (saving) { dirty = true; return; }
+    if (saving) { dirty = true; return result; }
     saving = true;
     fs.writeFile(tmp, data, (err) => {
       if (err) { saving = false; console.error('snapshot write failed:', err.message); return; }
@@ -258,6 +275,7 @@ function saveSnapshot({ sync = false } = {}) {
   } catch (err) {
     console.error('snapshot failed:', err.message);
   }
+  return result;
 }
 
 function loadSnapshot() {
@@ -268,7 +286,8 @@ function loadSnapshot() {
   for (const snap of parsed.rooms || []) {
     try {
       const game = Game.fromJSON(snap.game);
-      if (game.phase === 'ended' || Date.now() - game.updatedAt > GAME_TTL_MS) continue;
+      if (game.phase === 'ended') { console.log(`snapshot: ${game.code} not restored (finished)`); continue; }
+      if (Date.now() - game.updatedAt > GAME_TTL_MS) { console.log(`snapshot: ${game.code} not restored (idle longer than the game TTL)`); continue; }
       games.set(game.code, { game, tokens: new Map(snap.tokens || []), sockets: new Map(), snap, restoredAt: Date.now() });
       n++;
     } catch (err) {
@@ -284,8 +303,9 @@ let shuttingDown = false;
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`${signal} received: saving ${games.size} game(s) and closing.`);
-  try { saveSnapshot({ sync: true }); } catch (err) { console.error('final snapshot failed:', err.message); }
+  let account = 'persistence off, nothing saved';
+  try { const r = saveSnapshot({ sync: true }); if (r) account = describeSave(r); } catch (err) { console.error('final snapshot failed:', err.message); account = 'final snapshot FAILED'; }
+  console.log(`${signal} received: ${games.size} room(s) in memory, ${account}; closing.`);
   for (const ws of wss.clients) { try { ws.close(1012, 'Server restarting'); } catch {} }
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2000).unref();
