@@ -1,8 +1,9 @@
 # King of Tokyo Online
 
 A browser-based, real-time multiplayer implementation of Richard Garfield's
-**King of Tokyo** (2010 Iello edition). 2 to 6 players, no accounts, no build
-step: one Node.js process serves the page and runs the games.
+**King of Tokyo** (2010 Iello edition). 2 to 6 players, 16 monsters, no
+accounts, no build step: one Node.js process serves the page and runs the
+games.
 
 ## Running it
 
@@ -155,7 +156,8 @@ and never count as disconnected.
 
 In the base game every monster is identical; only the artwork differs. The
 host can switch on **Game Plus** in the waiting room to give each monster a
-unique power. It is off by default so the classic game is unchanged.
+unique power. It is off by default so the classic game is unchanged. The
+waiting room lists the powers of the monsters at the table.
 
 | Monster | Power | Effect |
 |---|---|---|
@@ -165,9 +167,21 @@ unique power. It is off by default so the classic game is unchanged.
 | Kraken | Ink Cloud | The first attack that hits you each turn deals 1 less damage. |
 | Alienoid | Energy Siphon | Gain 1 ⚡ at the end of each of your turns. |
 | Meka Dragon | Rocket Punch | Deal 1 extra damage when you attack from outside Tokyo. |
+| Cybertooth | Bite Back | The first monster to hit you each turn takes 1 damage. |
+| Boogie Woogie | Showstopper | Gain 1 ★ the first time each turn you damage a monster in Tokyo. |
+| Sheriff | New Sheriff in Town | Gain 2 ★ instead of 1 when you enter Tokyo. |
+| Cthulhu | Dreaming Deep | End your turn in Tokyo: gain 2 ⚡, then 3, then 4 for each turn in a row you stay. Resets when you leave. |
+| Space Penguin | Ice Slide | Heal 1 whenever you yield Tokyo. |
+| Anubis | Judgement | Each triple of numbers scores 1 extra ★. |
+| Cyber Kitty | Purr-charged | Rolling 3 or more ⚡ gives 1 extra ⚡. |
+| Pumpkin Jack | Trick or Treat | Cards cost 2 ⚡ less, minimum 2. Alien Metabolism still takes 1 more off. |
+| Pandakaï | Bamboo Bulk | Start with 13 Life instead of 10. |
+| Kookie | Snack Time | While in Tokyo, each ♥ you roll gives 1 ⚡ instead of nothing. |
 
 These are house powers written for this app, not the official Power Up
-expansion.
+expansion. The monsters are the six from the first edition plus ten from
+the second edition, Power Up!, the Halloween pack, the Monster Packs and the
+King of New York roster (Sheriff) and the promo set (Kookie).
 
 ### House rulings
 

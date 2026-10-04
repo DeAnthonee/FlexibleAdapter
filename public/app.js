@@ -64,6 +64,16 @@
     { id: 'kraken', image: '/img/kraken.webp', thumb: '/img/kraken-thumb.webp', name: 'Kraken', emoji: '🐙', color: '#5b7cff' },
     { id: 'alienoid', image: '/img/alienoid.webp', thumb: '/img/alienoid-thumb.webp', name: 'Alienoid', emoji: '👽', color: '#9ad53a' },
     { id: 'meka_dragon', image: '/img/meka_dragon.webp', thumb: '/img/meka_dragon-thumb.webp', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff' },
+    { id: 'cybertooth', image: '/img/cybertooth.webp', thumb: '/img/cybertooth-thumb.webp', name: 'Cybertooth', emoji: '🐯', color: '#ff6a3d' },
+    { id: 'boogie_woogie', image: '/img/boogie_woogie.webp', thumb: '/img/boogie_woogie-thumb.webp', name: 'Boogie Woogie', emoji: '👻', color: '#c45cff' },
+    { id: 'sheriff', image: '/img/sheriff.webp', thumb: '/img/sheriff-thumb.webp', name: 'Sheriff', emoji: '🤠', color: '#c98a4b' },
+    { id: 'cthulhu', image: '/img/cthulhu.webp', thumb: '/img/cthulhu-thumb.webp', name: 'Cthulhu', emoji: '🦑', color: '#3fae8a' },
+    { id: 'space_penguin', image: '/img/space_penguin.webp', thumb: '/img/space_penguin-thumb.webp', name: 'Space Penguin', emoji: '🐧', color: '#8fd8ff' },
+    { id: 'anubis', image: '/img/anubis.webp', thumb: '/img/anubis-thumb.webp', name: 'Anubis', emoji: '🐺', color: '#f2c230' },
+    { id: 'cyber_kitty', image: '/img/cyber_kitty.webp', thumb: '/img/cyber_kitty-thumb.webp', name: 'Cyber Kitty', emoji: '🐱', color: '#4fc3ff' },
+    { id: 'pumpkin_jack', image: '/img/pumpkin_jack.webp', thumb: '/img/pumpkin_jack-thumb.webp', name: 'Pumpkin Jack', emoji: '🎃', color: '#ff7a1a' },
+    { id: 'pandakai', image: '/img/pandakai.webp', thumb: '/img/pandakai-thumb.webp', name: 'Pandakaï', emoji: '🐼', color: '#8fd14f' },
+    { id: 'kookie', image: '/img/kookie.webp', thumb: '/img/kookie-thumb.webp', name: 'Kookie', emoji: '🍪', color: '#e0a24a' },
   ];
   monsters = FALLBACK_MONSTERS;
   const monster = (id) => monsters.find(m => m.id === id) || { name: '?', emoji: '❓', color: '#888' };
@@ -314,7 +324,7 @@
     const pl = $('#powers-list');
     pl.hidden = !powersOn;
     pl.innerHTML = '';
-    if (powersOn) for (const m of monsters) pl.append(el('li', {}, el('span', {}, m.emoji), el('span', { class: 'pname' }, `${m.name}: ${m.power.name}.`), el('span', { class: 'ptext' }, m.power.text)));
+    if (powersOn) for (const pp of state.players) { const m = monster(pp.monster); if (m.power) pl.append(el('li', {}, el('span', {}, m.emoji), el('span', { class: 'pname' }, `${m.name}: ${m.power.name}.`), el('span', { class: 'ptext' }, m.power.text))); }
     $('#btn-start').hidden = !isHost;
     $('#btn-start').disabled = state.players.length < 2;
     $('#lobby-hint').textContent = state.players.length < 2

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game } from '../game/engine.js';
+import { Game, MONSTERS } from '../game/engine.js';
 import { chooseAction, diceToKeep, botDelayMs } from '../game/bot.js';
 
 function seeded(seed) {
@@ -55,9 +55,11 @@ test('an all-bot table plays complete games without errors (fuzz)', () => {
   let finished = 0, actions = 0;
   for (let seed = 1; seed <= 40; seed++) {
     const g = new Game('FUZZ', { rng: seeded(seed) });
-    g.addPlayer('h', 'Host', 'king');
+    // seat a different mix of monsters each game so every power gets exercised
+    const pool = MONSTERS.map(m => m.id).sort(() => g.rng() - 0.5);
+    g.addPlayer('h', 'Host', pool[0]);
     const n = 2 + (seed % 5); // 3 to 7 requested -> capped at 6 seats
-    for (let i = 0; i < n && g.players.length < 6; i++) g.addBot('h');
+    for (let i = 0; i < n && g.players.length < 6; i++) g.addPlayer(`b${i}`, `Bot ${i}`, pool[i + 1], { bot: true });
     if (seed % 2) g.setOptions('h', { powers: true });
     g.start('h');
     g.player('h').bot = true; // the whole table runs itself
