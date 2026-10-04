@@ -235,6 +235,8 @@ test('index.html is version-stamped and only versioned assets are long-cached', 
     assert.equal(fresh.headers.get('cache-control'), 'public, max-age=31536000, immutable');
     const stale = await fetch(`http://127.0.0.1:${s.port}/app.js?v=0.0.1`);
     assert.equal(stale.headers.get('cache-control'), 'no-cache');
+    const missing = await fetch(`http://127.0.0.1:${s.port}/audio/music.mp3`);
+    assert.equal(missing.status, 404, 'a missing file with an extension is a 404, not the SPA page');
     const bare = await fetch(`http://127.0.0.1:${s.port}/app.js`);
     assert.equal(bare.headers.get('cache-control'), 'no-cache');
     assert.equal((await bare.text()).length, (await fresh.text()).length, 'same file either way');

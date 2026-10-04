@@ -47,6 +47,10 @@ const MIME = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
 };
 
 // ------------------------------------------------------- game registry
@@ -77,7 +81,13 @@ const server = http.createServer((req, res) => {
   if (!full.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end(); return; }
   if (file === '/index.html') { sendIndex(res); return; }
   fs.readFile(full, (err, data) => {
-    if (err) { sendIndex(res); return; } // Single-page app: unknown paths fall back to index.html (e.g. /ABCD join links)
+    if (err) {
+      // Single-page app: unknown paths without an extension fall back to index.html (e.g. /ABCD join
+      // links). A missing file (e.g. /audio/music.mp3 before a track is installed) is a plain 404.
+      if (path.extname(full)) { res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-cache' }); res.end('Not found'); return; }
+      sendIndex(res);
+      return;
+    }
     const ext = path.extname(full);
     // Assets are referenced as /app.js?v=<version> (see sendIndex), so a versioned URL can be
     // cached forever by browsers and CDNs: every deploy changes the URL. Unversioned requests

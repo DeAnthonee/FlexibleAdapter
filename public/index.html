@@ -86,7 +86,7 @@
         <button id="btn-start" class="btn primary big" type="button">Start game</button>
         <button id="btn-leave" class="btn big" type="button">Leave</button>
       </div>
-      <p class="version-line"><span class="version"></span></p>
+      <p class="version-line"><button id="btn-sound-lobby" class="btn tiny sound-btn" type="button">🔊 Sound</button> <span class="version"></span></p>
     </div>
   </section>
 
@@ -100,6 +100,7 @@
         <button id="btn-rules" class="btn small desktop-only" type="button">Rules</button>
         <button id="btn-leave-game" class="btn small desktop-only" type="button">Leave</button>
         <button id="btn-end-game" class="btn small danger-outline desktop-only" type="button" hidden>End game</button>
+        <button id="btn-sound" class="btn small sound-btn" type="button" aria-label="Sound settings" title="Sound">🔊</button>
         <button id="btn-menu" class="btn small mobile-only" type="button" aria-label="Menu">☰</button>
       </div>
     </header>
@@ -151,6 +152,7 @@
     </div>
   </div>
 
+  <script src="/audio.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
