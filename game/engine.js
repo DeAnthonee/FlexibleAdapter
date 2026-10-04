@@ -28,6 +28,26 @@ export const MONSTERS = [
     power: { name: 'Energy Siphon', text: 'Gain 1 ⚡ at the end of each of your turns.' } },
   { id: 'meka_dragon', image: '/img/meka_dragon.webp', thumb: '/img/meka_dragon-thumb.webp', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff',
     power: { name: 'Rocket Punch', text: 'Deal 1 extra damage when you attack from outside Tokyo.' } },
+  { id: 'cybertooth', image: '/img/cybertooth.webp', thumb: '/img/cybertooth-thumb.webp', name: 'Cybertooth', emoji: '🐯', color: '#ff6a3d',
+    power: { name: 'Bite Back', text: 'The first monster to hit you each turn takes 1 damage.' } },
+  { id: 'boogie_woogie', image: '/img/boogie_woogie.webp', thumb: '/img/boogie_woogie-thumb.webp', name: 'Boogie Woogie', emoji: '👻', color: '#c45cff',
+    power: { name: 'Showstopper', text: 'Gain 1 ★ the first time each turn you damage a monster in Tokyo.' } },
+  { id: 'sheriff', image: '/img/sheriff.webp', thumb: '/img/sheriff-thumb.webp', name: 'Sheriff', emoji: '🤠', color: '#c98a4b',
+    power: { name: 'New Sheriff in Town', text: 'Gain 2 ★ instead of 1 when you enter Tokyo.' } },
+  { id: 'cthulhu', image: '/img/cthulhu.webp', thumb: '/img/cthulhu-thumb.webp', name: 'Cthulhu', emoji: '🦑', color: '#3fae8a',
+    power: { name: 'Dreaming Deep', text: 'End your turn in Tokyo: gain 2 ⚡, then 3, then 4 for each turn in a row you stay. Resets when you leave.' } },
+  { id: 'space_penguin', image: '/img/space_penguin.webp', thumb: '/img/space_penguin-thumb.webp', name: 'Space Penguin', emoji: '🐧', color: '#8fd8ff',
+    power: { name: 'Ice Slide', text: 'Heal 1 whenever you yield Tokyo.' } },
+  { id: 'anubis', image: '/img/anubis.webp', thumb: '/img/anubis-thumb.webp', name: 'Anubis', emoji: '🐺', color: '#f2c230',
+    power: { name: 'Judgement', text: 'Each triple of numbers scores 1 extra ★.' } },
+  { id: 'cyber_kitty', image: '/img/cyber_kitty.webp', thumb: '/img/cyber_kitty-thumb.webp', name: 'Cyber Kitty', emoji: '🐱', color: '#4fc3ff',
+    power: { name: 'Purr-charged', text: 'Rolling 3 or more ⚡ gives 1 extra ⚡.' } },
+  { id: 'pumpkin_jack', image: '/img/pumpkin_jack.webp', thumb: '/img/pumpkin_jack-thumb.webp', name: 'Pumpkin Jack', emoji: '🎃', color: '#ff7a1a',
+    power: { name: 'Trick or Treat', text: 'Cards cost 2 ⚡ less, minimum 2.' } },
+  { id: 'pandakai', image: '/img/pandakai.webp', thumb: '/img/pandakai-thumb.webp', name: 'Pandakaï', emoji: '🐼', color: '#8fd14f',
+    power: { name: 'Bamboo Bulk', text: 'Start with 13 Life instead of 10.' } },
+  { id: 'kookie', image: '/img/kookie.webp', thumb: '/img/kookie-thumb.webp', name: 'Kookie', emoji: '🍪', color: '#e0a24a',
+    power: { name: 'Snack Time', text: 'While in Tokyo, each ♥ you roll gives 1 ⚡ instead of nothing.' } },
 ];
 export const DEFAULT_OPTIONS = { powers: false };
 
@@ -104,6 +124,8 @@ export class Game {
   /** Does p's monster power apply? Only in Game Plus mode. */
   power(p, monsterId) { return this.options.powers && p.monster === monsterId; }
   powerName(p) { return MONSTERS.find(m => m.id === p.monster).power.name; }
+  /** Life a monster starts the game with (Pandakaï's Bamboo Bulk adds 3 in Game Plus). */
+  startHp(p) { return BASE_HP + (this.power(p, 'pandakai') ? 3 : 0); }
 
   /** Players in clockwise order starting after `from`. */
   clockwiseFrom(from) {
@@ -162,6 +184,7 @@ export class Game {
       id, name, monster: monsterId,
       hp: BASE_HP, maxHp: BASE_HP, vp: 0, energy: 0,
       cards: [], mimicTarget: null, alive: true, poison: 0, shrink: 0, connected: true, left: false, bot,
+      tokyoStreak: 0,          // turns in a row ended in Tokyo (Cthulhu's Dreaming Deep)
     };
     this.players.push(p);
     if (!this.hostId && !bot) this.hostId = id;
@@ -246,6 +269,7 @@ export class Game {
     this.beginAction();
     this.phase = 'playing';
     if (this.options.powers) this.log('✨ Game Plus: monster powers are active.');
+    for (const p of this.players) { p.hp = this.startHp(p); p.maxHp = p.hp; }
     this.bayActive = this.players.length >= 5;
     this.deck = shuffle(CARDS.map(c => c.id), this.rng);
     this.shop = [];
@@ -304,6 +328,8 @@ export class Game {
       rollsLeft: 3 + (this.has(p, 'giant_brain') ? 1 : 0) + (this.power(p, 'cyber_bunny') ? 1 : 0),
       rolled: false,
       inkUsed: {},             // playerId -> true once Kraken's Ink Cloud absorbed a hit this turn
+      biteBack: {},            // playerId -> true once Cybertooth's Bite Back triggered this turn
+      showUsed: false,         // Boogie Woogie's Showstopper already scored this turn
       pendingYield: [],
       yieldDamage: {},         // targetId -> damage taken this attack (for Jets)
       attacked: false,
@@ -336,6 +362,10 @@ export class Game {
         if (this.has(p, 'rooting_for_the_underdog') && this.others(p).every(o => o.vp > p.vp)) this.gainVp(p, 1, '(Rooting for the Underdog)');
         if (this.power(p, 'alienoid')) this.gainEnergy(p, 1, '(Energy Siphon)');
         if (this.power(p, 'gigazaur') && !this.inTokyo(p) && p.hp < p.maxHp) { this.log(`${p.name}'s Regenerating Scales:`); this.heal(p, 1); }
+        if (this.power(p, 'cthulhu') && this.inTokyo(p)) {
+          p.tokyoStreak = (p.tokyoStreak || 0) + 1;
+          this.gainEnergy(p, Math.min(4, 1 + p.tokyoStreak), `(Dreaming Deep, turn ${p.tokyoStreak} in Tokyo)`);
+        }
         if (p.poison > 0) {
           this.log(`${p.name} suffers ${p.poison} Poison damage.`);
           this.damage(p, p.poison, { attack: false, source: null, via: 'poison' });
@@ -470,6 +500,17 @@ export class Game {
     if (source && source.id !== p.id) {
       if (this.has(source, 'poison_spit')) { p.poison++; this.log(`${p.name} gets a Poison counter.`); }
       if (this.has(source, 'shrink_ray')) { p.shrink++; this.log(`${p.name} gets a Shrink counter.`); }
+      if (via === 'claw' && this.turn) {
+        if (this.power(p, 'cybertooth') && !this.turn.biteBack[p.id] && source.alive) {
+          this.turn.biteBack[p.id] = true;
+          this.log(`${p.name}'s Bite Back snaps at ${source.name}.`);
+          this.enqueue(() => this.damage(source, 1, { source: p, attack: false, via: 'bite' }));
+        }
+        if (this.power(source, 'boogie_woogie') && !this.turn.showUsed && this.inTokyo(p)) {
+          this.turn.showUsed = true;
+          this.gainVp(source, 1, '(Showstopper)');
+        }
+      }
     }
     if (n >= 2 && this.has(p, 'making_it_stronger')) this.gainEnergy(p, 1, "(We're Only Making It Stronger)");
     if (p.hp === 0) this.eliminate(p);
@@ -493,7 +534,7 @@ export class Game {
       this.log(`${p.name} is destroyed... but It Has a Child! ${p.name} starts over.`);
       for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
       p.mimicTarget = null;
-      p.vp = 0; p.energy = 0; p.hp = BASE_HP; p.maxHp = BASE_HP; p.poison = 0; p.shrink = 0;
+      p.vp = 0; p.energy = 0; p.hp = this.startHp(p); p.maxHp = p.hp; p.poison = 0; p.shrink = 0;
       return;
     }
     p.alive = false;
@@ -581,12 +622,13 @@ export class Game {
     else if (this.bayActive && !this.tokyo.bay) this.tokyo.bay = p.id;
     else return;
     this.log(`${p.name} enters ${this.tokyo.city === p.id ? 'Tokyo City' : 'Tokyo Bay'}!`);
-    this.gainVp(p, 1, 'for taking control of Tokyo');
+    this.gainVp(p, this.power(p, 'sheriff') ? 2 : 1, 'for taking control of Tokyo');
   }
 
   leaveTokyo(p) {
     if (this.tokyo.city === p.id) this.tokyo.city = null;
     if (this.tokyo.bay === p.id) this.tokyo.bay = null;
+    p.tokyoStreak = 0;
   }
 
   hasFreeTokyoSpot() {
@@ -599,7 +641,7 @@ export class Game {
     if (occ) { this.tokyo.city = null; this.log(`${occ.name} is forced out of Tokyo City.`); }
     this.tokyo.city = p.id;
     this.log(`${p.name} drops into Tokyo City!`);
-    this.gainVp(p, 1, 'for taking control of Tokyo');
+    this.gainVp(p, this.power(p, 'sheriff') ? 2 : 1, 'for taking control of Tokyo');
   }
 
   // ----------------------------------------------------------- actions
@@ -768,19 +810,22 @@ export class Game {
     for (const n of ['1', '2', '3']) {
       if (count[n] >= 3) {
         this.gainVp(p, Number(n) + (count[n] - 3), `for ${count[n]} × ${n}`);
+        if (this.power(p, 'anubis')) this.gainVp(p, 1, '(Judgement)');
         if (n === '1' && this.has(p, 'gourmet')) this.gainVp(p, 2, '(Gourmet)');
         if (n === '1' && this.has(p, 'freeze_time')) t.freezeTime = true;
         if (n === '2' && this.has(p, 'poison_quills')) bonusDamage += 2;
       }
     }
     if (count.energy) this.gainEnergy(p, count.energy);
+    if (count.energy >= 3 && this.power(p, 'cyber_kitty')) this.gainEnergy(p, 1, '(Purr-charged)');
     if (count.heart) {
       let hearts = count.heart;
       if (!this.inTokyo(p)) {
         const used = Math.min(hearts, Math.max(0, p.maxHp - p.hp));
         if (used > 0) this.heal(p, used);
         hearts -= used;
-      } else this.log(`${p.name} cannot heal in Tokyo.`);
+      } else if (this.power(p, 'kookie')) this.gainEnergy(p, hearts, '(Snack Time)');
+      else this.log(`${p.name} cannot heal in Tokyo.`);
       while (hearts > 0 && (p.shrink > 0 || p.poison > 0)) {
         if (p.shrink > 0) { p.shrink--; this.log(`${p.name} removes a Shrink counter.`); }
         else { p.poison--; this.log(`${p.name} removes a Poison counter.`); }
@@ -868,6 +913,7 @@ export class Game {
         this.log(`${p.name}'s Jets cancel the damage taken (${p.hp} ♥).`);
       }
       this.leaveTokyo(p);
+      if (this.power(p, 'space_penguin') && p.hp < p.maxHp) { this.log(`${p.name}'s Ice Slide:`); this.heal(p, 1); }
       if (this.has(p, 'burrowing')) {
         this.log(`${p.name}'s Burrowing bites back.`);
         this.enqueue(() => this.damage(attacker, 1, { source: p, attack: false, via: 'bite' }));
@@ -891,7 +937,9 @@ export class Game {
 
   // ------------------------------------------------------------ buying
   cardCost(p, card) {
-    return Math.max(0, card.cost - (this.has(p, 'alien_metabolism') ? 1 : 0));
+    let cost = card.cost;
+    if (this.power(p, 'pumpkin_jack')) cost = Math.max(2, cost - 2);
+    return Math.max(0, cost - (this.has(p, 'alien_metabolism') ? 1 : 0));
   }
 
   actBuy(p, index) {
@@ -1035,7 +1083,7 @@ export class Game {
     g.options = { ...DEFAULT_OPTIONS, ...(d.options || {}) };
     g.bayActive = !!d.bayActive; g.tokyo = { city: null, bay: null, ...(d.tokyo || {}) };
     g.deck = [...(d.deck || [])]; g.discard = [...(d.discard || [])]; g.shop = [...(d.shop || [])];
-    g.players = (d.players || []).map(p => ({ ...p, connected: !!p.bot }));
+    g.players = (d.players || []).map(p => ({ tokyoStreak: 0, ...p, connected: !!p.bot }));
     g.turn = d.turn ? JSON.parse(JSON.stringify(d.turn)) : null;
     g.logs = [...(d.logs || [])]; g.seq = d.seq || 0; g.nextDecisionId = d.nextDecisionId || 1;
     g.createdAt = d.createdAt || Date.now(); g.updatedAt = d.updatedAt || Date.now();

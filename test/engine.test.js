@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, GameError, FACES } from '../game/engine.js';
+import { Game, GameError, FACES, MONSTERS } from '../game/engine.js';
+import { CARD_BY_ID } from '../game/cards.js';
 
 /** Deterministic rng that returns the queued values (as a fraction of 6 faces), then 0. */
 function makeGame(n = 2, { rng } = {}) {
@@ -581,4 +582,177 @@ test('events: card damage, blocks and knockouts are reported', () => {
   g.tokyo.city = x.id;
   forceDice(g, ['claw', '1', '2', '3', '1', '2']);
   assert.deepEqual(g.publicState().events, [{ type: 'blocked', from: atk.id, to: x.id, by: 'armor' }]);
+});
+
+// ------------------------------------------------------- Game Plus: the ten newer monsters
+
+/** A Game Plus table seating exactly these monsters (host first). */
+function plusTable(ids, { powers = true } = {}) {
+  const g = new Game('PLUS2', { rng: () => 0 });
+  ids.forEach((id, i) => g.addPlayer(`p${i}`, `P${i}`, id));
+  if (powers) g.setOptions('p0', { powers: true });
+  g.start('p0');
+  return g;
+}
+
+test('sixteen monsters, each with a distinct power', () => {
+  assert.equal(MONSTERS.length, 16);
+  assert.equal(new Set(MONSTERS.map(m => m.id)).size, 16);
+  assert.equal(new Set(MONSTERS.map(m => m.power.name)).size, 16);
+  for (const m of MONSTERS) assert.ok(m.image && m.thumb && m.emoji && m.color, `${m.id} has art`);
+});
+
+test('Cybertooth: Bite Back hits the first attacker each turn, not card damage', () => {
+  const g = plusTable(['king', 'cybertooth']);
+  const king = byMonster(g, 'king'), tooth = byMonster(g, 'cybertooth');
+  g.tokyo.city = tooth.id;
+  g.startTurn(king.id);
+  forceDice(g, ['claw', 'claw', '1', '2', '3', '1']);
+  assert.equal(tooth.hp, 8);
+  assert.equal(king.hp, 9, 'attacker bitten once');
+  g.act(tooth.id, { type: 'yield', yes: false });
+  g.shop = ['flame_thrower', 'heal', 'corner_store'];
+  king.energy = 3;
+  g.act(king.id, { type: 'buy', index: 0 });
+  assert.equal(tooth.hp, 6);
+  assert.equal(king.hp, 9, 'card damage is not bitten');
+  // classic rules: no bite
+  const c = plusTable(['king', 'cybertooth'], { powers: false });
+  c.tokyo.city = byMonster(c, 'cybertooth').id;
+  c.startTurn(byMonster(c, 'king').id);
+  forceDice(c, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(byMonster(c, 'king').hp, 10);
+});
+
+test('Boogie Woogie: Showstopper scores once per turn for hitting Tokyo', () => {
+  const g = plusTable(['boogie_woogie', 'king', 'kraken']);
+  const boogie = byMonster(g, 'boogie_woogie'), king = byMonster(g, 'king');
+  g.tokyo.city = king.id;
+  g.startTurn(boogie.id);
+  forceDice(g, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(boogie.vp, 1, 'one star for damaging the monster in Tokyo');
+  g.act(king.id, { type: 'yield', yes: false });
+  // attacking from inside Tokyo hits monsters outside: no Showstopper
+  const h = plusTable(['boogie_woogie', 'king']);
+  const b2 = byMonster(h, 'boogie_woogie');
+  h.tokyo.city = b2.id;
+  h.startTurn(b2.id);
+  const before = b2.vp;
+  forceDice(h, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(b2.vp, before);
+});
+
+test('Sheriff: New Sheriff in Town pays 2 stars for entering Tokyo', () => {
+  const g = plusTable(['sheriff', 'king']);
+  const sheriff = byMonster(g, 'sheriff');
+  g.startTurn(sheriff.id);
+  forceDice(g, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(g.tokyo.city, sheriff.id);
+  assert.equal(sheriff.vp, 2);
+  const c = plusTable(['sheriff', 'king'], { powers: false });
+  const s2 = byMonster(c, 'sheriff');
+  c.startTurn(s2.id);
+  forceDice(c, ['claw', '1', '2', '3', '1', '2']);
+  assert.equal(s2.vp, 1);
+});
+
+test('Cthulhu: Dreaming Deep escalates 2, 3, 4, 4 and resets on leaving Tokyo', () => {
+  const g = plusTable(['cthulhu', 'king']);
+  const c = byMonster(g, 'cthulhu');
+  g.tokyo.city = c.id;
+  const quiet = ['1', '2', '3', '1', '2', '3'];
+  const gains = [];
+  for (let i = 0; i < 4; i++) {
+    g.startTurn(c.id);
+    const before = c.energy;
+    forceDice(g, quiet);
+    g.act(c.id, { type: 'endTurn' });
+    gains.push(c.energy - before);
+  }
+  assert.deepEqual(gains, [2, 3, 4, 4]);
+  g.leaveTokyo(c);
+  assert.equal(c.tokyoStreak, 0);
+  g.startTurn(c.id);
+  const before = c.energy;
+  forceDice(g, quiet);
+  g.act(c.id, { type: 'endTurn' });
+  assert.equal(c.energy - before, 0, 'nothing outside Tokyo');
+});
+
+test('Space Penguin: Ice Slide heals 1 on yielding', () => {
+  const g = plusTable(['king', 'space_penguin']);
+  const king = byMonster(g, 'king'), pen = byMonster(g, 'space_penguin');
+  g.tokyo.city = pen.id;
+  g.startTurn(king.id);
+  forceDice(g, ['claw', 'claw', '1', '2', '3', '1']);
+  assert.equal(pen.hp, 8);
+  g.act(pen.id, { type: 'yield', yes: true });
+  assert.equal(pen.hp, 9);
+  assert.equal(g.tokyo.city, king.id);
+});
+
+test('Anubis: Judgement adds a star to every number triple', () => {
+  const g = plusTable(['anubis', 'king']);
+  const a = byMonster(g, 'anubis');
+  g.startTurn(a.id);
+  forceDice(g, ['1', '1', '1', '2', '2', '2']);
+  assert.equal(a.vp, 1 + 1 + 2 + 1);
+});
+
+test('Cyber Kitty: Purr-charged gives a bonus energy on 3+ energy dice', () => {
+  const g = plusTable(['cyber_kitty', 'king']);
+  const k = byMonster(g, 'cyber_kitty');
+  g.startTurn(k.id);
+  forceDice(g, ['energy', 'energy', '1', '2', '3', '1']);
+  assert.equal(k.energy, 2);
+  g.startTurn(k.id);
+  forceDice(g, ['energy', 'energy', 'energy', '2', '3', '1']);
+  assert.equal(k.energy, 6);
+});
+
+test('Pumpkin Jack: Trick or Treat makes cards 2 cheaper, never below 2', () => {
+  const g = plusTable(['pumpkin_jack', 'king']);
+  const j = byMonster(g, 'pumpkin_jack');
+  assert.equal(g.cardCost(j, CARD_BY_ID.heal), 2, '3 -> 2');
+  assert.equal(g.cardCost(j, CARD_BY_ID.extra_head_1), 5, '7 -> 5');
+  j.cards.push('alien_metabolism');
+  assert.equal(g.cardCost(j, CARD_BY_ID.heal), 1, 'Alien Metabolism still stacks');
+  assert.equal(g.cardCost(byMonster(g, 'king'), CARD_BY_ID.heal), 3);
+});
+
+test('Pandakaï: Bamboo Bulk starts at 13 Life only in Game Plus', () => {
+  const g = plusTable(['pandakai', 'king']);
+  const p = byMonster(g, 'pandakai');
+  assert.equal(p.hp, 13); assert.equal(p.maxHp, 13);
+  assert.equal(byMonster(g, 'king').hp, 10);
+  const c = plusTable(['pandakai', 'king'], { powers: false });
+  assert.equal(byMonster(c, 'pandakai').hp, 10);
+});
+
+test('Kookie: Snack Time turns hearts into energy while in Tokyo', () => {
+  const g = plusTable(['kookie', 'king']);
+  const k = byMonster(g, 'kookie');
+  g.tokyo.city = k.id;
+  k.hp = 8;
+  g.startTurn(k.id);
+  forceDice(g, ['heart', 'heart', '1', '2', '3', '1']);
+  assert.equal(k.energy, 2);
+  assert.equal(k.hp, 8, 'still no healing in Tokyo');
+  g.leaveTokyo(k);
+  g.startTurn(k.id);
+  forceDice(g, ['heart', 'heart', '1', '2', '3', '1']);
+  assert.equal(k.energy, 2, 'outside Tokyo hearts heal as usual');
+  assert.equal(k.hp, 10);
+});
+
+test('new monsters survive a save and restore mid-game', () => {
+  const g = plusTable(['cthulhu', 'pandakai']);
+  const c = byMonster(g, 'cthulhu');
+  g.tokyo.city = c.id;
+  g.startTurn(c.id);
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.act(c.id, { type: 'endTurn' });
+  const r = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.player(c.id).tokyoStreak, 1);
+  assert.equal(byMonster(r, 'pandakai').maxHp, 13);
 });

@@ -169,7 +169,7 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 }
 .field input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(56, 232, 255, .2); }
 
-.monster-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.monster-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .monster-opt {
   --mc: var(--line-strong);
   border: 2px solid var(--line); background: var(--ink); border-radius: 14px; padding: 12px 6px 10px;
@@ -178,7 +178,7 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 }
 .monster-opt .emoji { font-size: 2.3rem; line-height: 1; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .5)); }
 .art { object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; }
-.pick-art { width: 84px; height: 84px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .55)); transition: transform .15s ease; }
+.pick-art { width: 72px; height: 72px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .55)); transition: transform .15s ease; }
 .monster-opt:hover:not(.taken) .pick-art, .monster-opt.selected .pick-art { transform: scale(1.08); }
 .lobby-art { width: 44px; height: 44px; }
 .avatar-art { width: 100%; height: 100%; object-fit: cover; transform: scale(1.75); transform-origin: 50% 22%; }
@@ -186,7 +186,7 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .standing-art { width: 28px; height: 28px; }
 .winner-art { display: flex; justify-content: center; }
 .winner-img { width: 220px; height: 220px; filter: drop-shadow(0 14px 20px rgba(0, 0, 0, .6)); animation: stomp 1.6s ease-in-out infinite; }
-.monster-opt .name { font-size: .8rem; font-weight: 800; }
+.monster-opt .name { font-size: .72rem; font-weight: 800; text-align: center; line-height: 1.1; }
 .monster-opt:hover:not(.taken) { transform: translateY(-2px); border-color: var(--mc); }
 .monster-opt.selected { border-color: var(--mc); background: var(--ink-3); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc) 35%, transparent), 0 0 24px color-mix(in srgb, var(--mc) 45%, transparent); transform: translateY(-2px) scale(1.03); }
 .monster-opt.taken { opacity: .3; cursor: not-allowed; }
@@ -615,4 +615,13 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* 16 monsters on a phone: four tight columns */
+@media (max-width: 720px) {
+  .monster-picker { gap: 6px; }
+  .monster-opt { padding: 8px 2px 6px; border-radius: 12px; }
+  .pick-art { width: 56px; height: 56px; }
+  .monster-opt .name { font-size: .64rem; }
+  .monster-opt.taken .name::after { content: ""; }
 }
