@@ -80,6 +80,19 @@
   const monster = (id) => monsters.find(m => m.id === id) || { name: '?', emoji: '❓', color: '#888' };
   const hasPower = (p, id) => p.cards.some(c => c.id === id) || (p.mimicTarget && p.mimicTarget.id === id && p.cards.some(c => c.id === 'mimic'));
   const byId = (id) => state.players.find(p => p.id === id);
+  /** What `p` pays for a card: mirrors cardCost() in game/engine.js (Trick or Treat, then Alien Metabolism). */
+  function cardPrice(p, c) {
+    let cost = c.cost;
+    if (state.options && state.options.powers && p.monster === 'pumpkin_jack') cost = Math.max(2, cost - 2);
+    return Math.max(0, cost - (hasPower(p, 'alien_metabolism') ? 1 : 0));
+  }
+  /** Why `p` pays less, for the shop hint; empty when nothing applies. */
+  function discountReasons(p) {
+    const out = [];
+    if (state.options && state.options.powers && p.monster === 'pumpkin_jack') out.push('🎃 Trick or Treat: cards cost 2 ⚡ less (never below 2)');
+    if (hasPower(p, 'alien_metabolism')) out.push('Alien Metabolism: 1 ⚡ less');
+    return out;
+  }
   /** Monster artwork; falls back to the emoji if the image is missing or fails to load. */
   function art(m, cls = 'art', { thumb = false } = {}) {
     const src = thumb ? m.thumb : m.image;
@@ -477,7 +490,6 @@
     const myBuyStep = self && self.alive && t.playerId === self.id && t.step === 'buy' && state.phase === 'playing' && !d;
     const canSell = myBuyStep && hasPower(self, 'metamorph');
     const canTentacle = myBuyStep && hasPower(self, 'parasitic_tentacles');
-    const discount = self && hasPower(self, 'alien_metabolism') ? 1 : 0;
     for (const p of state.players) {
       const m = monster(p.monster);
       const inTokyo = state.tokyo.city === p.id || state.tokyo.bay === p.id;
@@ -512,7 +524,7 @@
         card.append(el('div', { class: 'pcards' }, p.cards.map(c => {
           const isMimic = c.id === 'mimic';
           const label = isMimic && p.mimicTarget ? `Mimic → ${p.mimicTarget.name}` : c.name;
-          const cost = Math.max(0, c.cost - discount);
+          const cost = self ? cardPrice(self, c) : c.cost;
           let title = `${c.name} (${c.cost}⚡): ${c.text}`;
           if (sellable) title += ' · Click to sell (Metamorph)';
           if (buyable) title += ` · Click to buy for ${cost}⚡ (Parasitic Tentacles)`;
@@ -770,11 +782,12 @@
     box.append(el('div', { class: 'sheet-head' }, el('h3', {}, `Cards for sale · ${state.deckSize} in deck`),
       el('button', { class: 'btn small mobile-only sheet-close', onclick: closeSheets }, 'Close')));
     const canBuy = mine && t.step === 'buy' && state.phase === 'playing' && !d;
-    const discount = hasPower(self, 'alien_metabolism') ? 1 : 0;
+    const reasons = self ? discountReasons(self) : [];
+    if (reasons.length) box.append(el('p', { class: 'shop-hint' }, reasons.join(' · ')));
     const grid = el('div', { class: 'shop' });
-    state.shop.forEach((c, i) => grid.append(cardEl(c, canBuy, self, discount, () => act({ type: 'buy', index: i }))));
+    state.shop.forEach((c, i) => grid.append(cardEl(c, canBuy, self, () => act({ type: 'buy', index: i }))));
     if (t.labCard && hasPower(cur, 'made_in_a_lab')) {
-      grid.append(cardEl({ ...t.labCard, name: t.labCard.name + ' (top of deck)' }, canBuy, self, discount, () => act({ type: 'buyLab' })));
+      grid.append(cardEl({ ...t.labCard, name: t.labCard.name + ' (top of deck)' }, canBuy, self, () => act({ type: 'buyLab' })));
     }
     box.append(grid);
     if (canBuy) {
@@ -786,15 +799,16 @@
     }
   }
 
-  function cardEl(c, canBuy, self, discount, onBuy) {
-    const cost = Math.max(0, c.cost - discount);
+  function cardEl(c, canBuy, self, onBuy) {
+    const cost = self ? cardPrice(self, c) : c.cost;
+    const deal = cost < c.cost; // show the printed price struck out and the discounted price lit up
     const node = el('div', { class: 'card ' + (c.type === 'discard' ? 'discard-type' : 'keep-type') },
-      el('div', { class: 'cost' }, cost),
-      el('div', { class: 'cname' }, c.name),
+      el('div', { class: 'cost' + (deal ? ' deal' : ''), title: deal ? `Discounted from ${c.cost} ⚡` : null }, cost),
+      el('div', { class: 'cname' }, c.name, deal ? el('s', { class: 'was', title: 'Printed price' }, `${c.cost}⚡`) : null),
       el('div', { class: 'ctype' }, c.type === 'keep' ? 'Keep' : 'Discard'),
       el('div', { class: 'ctext' }, c.text),
     );
-    if (canBuy) node.append(el('button', { class: 'btn small primary', disabled: self.energy < cost, onclick: onBuy }, `Buy for ${cost}⚡`));
+    if (canBuy) node.append(el('button', { class: 'btn small primary', disabled: self.energy < cost, onclick: onBuy }, deal ? `Buy for ${cost}⚡ (was ${c.cost})` : `Buy for ${cost}⚡`));
     return node;
   }
 
@@ -916,11 +930,10 @@
             el('button', { class: 'btn big', onclick: () => { closeModal(); act({ type: 'decide', answer: false }); } }, `Take ${d.data.amount} damage`)),
         );
       } else if (d.kind === 'opportunist') {
-        const discount = hasPower(self, 'alien_metabolism') ? 1 : 0;
         openModal(key,
           el('h2', {}, '👀 Opportunist'),
           el('p', {}, `A new card was revealed. Buy it now? You have ${self.energy} ⚡.`),
-          el('div', { class: 'shop', style: 'margin-top:12px' }, d.data.cards.map(c => cardEl(c, true, self, discount, () => { closeModal(); act({ type: 'decide', answer: { buy: c.id } }); }))),
+          el('div', { class: 'shop', style: 'margin-top:12px' }, d.data.cards.map(c => cardEl(c, true, self, () => { closeModal(); act({ type: 'decide', answer: { buy: c.id } }); }))),
           el('div', { class: 'action-row' }, el('button', { class: 'btn big', onclick: () => { closeModal(); act({ type: 'decide', answer: { pass: true } }); } }, 'Pass')),
         );
       }
