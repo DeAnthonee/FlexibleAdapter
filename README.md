@@ -156,6 +156,14 @@ npm test
   reports these as events with each update, so every player sees them.
   Honours the reduced-motion setting.
 
+### Sound
+
+Background music loops in the waiting room and during the game, starting on
+the first tap (browsers block audio before a gesture) and pausing while the
+tab is hidden. The speaker button opens a panel with a volume slider and a
+mute switch; the choice is remembered per device. The track is
+`public/audio/music.mp3`; see `public/audio/README.md` for how to replace it.
+
 ### Practice mode (computer players)
 
 For testing on your own, the host can add computer players in the waiting room

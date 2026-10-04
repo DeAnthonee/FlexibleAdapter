@@ -151,6 +151,7 @@
   // ------------------------------------------------------------ screens
   function show(id) {
     for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
+    if (window.KotAudio) KotAudio.music(id === 'screen-game' || id === 'screen-lobby');
   }
 
   // ------------------------------------------------------------ websocket
@@ -393,6 +394,35 @@
         isHost ? el('button', { class: 'btn big danger-outline', onclick: () => { closeModal(); $('#btn-end-game').click(); } }, '🛑 End game for everyone') : null),
       el('div', { class: 'action-row' }, el('button', { class: 'btn', onclick: closeModal }, 'Close')));
   });
+  // ------------------------------------------------------------ sound
+  function soundPanel() {
+    if (!window.KotAudio) return;
+    const s = KotAudio.state();
+    const pct = el('span', { class: 'pct' }, `${Math.round(s.music * 100)}%`);
+    const slider = el('input', { type: 'range', min: '0', max: '100', step: '5', value: String(Math.round(s.music * 100)), 'aria-label': 'Music volume' });
+    slider.addEventListener('input', () => { KotAudio.setMusicVolume(Number(slider.value) / 100); pct.textContent = `${slider.value}%`; });
+    const mute = el('button', { class: 'btn ' + (s.muted ? 'primary' : ''), onclick: () => { KotAudio.toggleMuted(); soundPanel(); } }, s.muted ? '🔇 Muted — tap to unmute' : '🔊 Sound on — tap to mute');
+    const status = !s.supported ? 'This browser cannot play audio.'
+      : s.track === 'missing' ? 'No music track installed yet.'
+      : s.track === 'error' ? 'The music track could not be loaded.'
+      : s.track === 'loading' ? 'Loading the music…'
+      : s.playing ? 'Music is playing.' : s.wanted ? 'Music starts after your first tap.' : 'Music plays in the waiting room and during the game.';
+    openModal('sound',
+      el('h2', {}, '🎵 Sound'),
+      el('div', { class: 'sound-row' }, el('label', {}, 'Music'), slider, pct),
+      el('div', { class: 'sound-row' }, mute),
+      el('p', { class: 'sound-status' }, status),
+      el('div', { class: 'action-row' }, el('button', { class: 'btn', onclick: closeModal }, 'Close')));
+  }
+  function paintSound(s) {
+    const icon = !s || s.muted || s.music === 0 ? '🔇' : '🔊';
+    $('#btn-sound').textContent = icon;
+    $('#btn-sound-lobby').textContent = `${icon} Sound`;
+  }
+  $('#btn-sound').addEventListener('click', soundPanel);
+  $('#btn-sound-lobby').addEventListener('click', soundPanel);
+  if (window.KotAudio) { paintSound(KotAudio.state()); KotAudio.onChange((s) => { paintSound(s); if (autoModal === 'sound') { const st = $('#modal .sound-status'); if (st) st.textContent = s.playing ? 'Music is playing.' : st.textContent; } }); }
+
   const closeSheets = () => document.body.classList.remove('shop-open', 'log-open');
   $('#btn-shop').addEventListener('click', () => { const open = document.body.classList.contains('shop-open'); closeSheets(); if (!open) document.body.classList.add('shop-open'); });
   $('#btn-log').addEventListener('click', () => { const open = document.body.classList.contains('log-open'); closeSheets(); if (!open) { document.body.classList.add('log-open'); const l = $('#log'); l.scrollTop = l.scrollHeight; } });
@@ -955,7 +985,7 @@
     }
     // Close automatic modals that no longer apply (keep confirms, pickers and the detail view open).
     if (autoModal && autoModal.startsWith('detail:')) { renderDetail(); return; }
-    if (autoModal && autoModal !== 'confirm' && autoModal !== 'pick') closeModal();
+    if (autoModal && autoModal !== 'confirm' && autoModal !== 'pick' && autoModal !== 'sound') closeModal();
   }
 
   // ------------------------------------------------------------ boot
