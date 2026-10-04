@@ -213,7 +213,15 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   text-align: left; border-left: 5px solid var(--mc);
 }
 .lobby-players .emoji { font-size: 1.7rem; }
-.lobby-players .tag { margin-left: auto; font-size: .7rem; color: var(--cyan); text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
+.lobby-players .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lobby-players .who-top { display: flex; align-items: center; gap: 8px; }
+.lobby-players .who-top > b { margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-players .who-top .tag, .lobby-players .who-top .remove-bot { flex: none; }
+.lobby-players .power-line { font-size: .72rem; line-height: 1.3; color: var(--fg-muted); font-weight: 600; }
+.lobby-players .power-line b { color: var(--yellow, #ffd166); }
+.power-preview { margin: 8px 0 0; min-height: 1.3em; font-size: .82rem; line-height: 1.35; color: var(--fg-muted); text-align: center; }
+.power-preview b { color: var(--yellow, #ffd166); }
+.lobby-players .tag { margin-left: 0; white-space: nowrap; font-size: .7rem; color: var(--cyan); text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
 .lobby-players .tag + .tag { margin-left: 8px; }
 
 .bot-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; text-align: left; }
@@ -247,10 +255,6 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .toggle input:disabled ~ * { cursor: default; }
 .toggle-text { display: flex; flex-direction: column; line-height: 1.25; }
 .toggle-text small { color: var(--fg-muted); }
-.powers-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
-.powers-list li { display: flex; gap: 8px; align-items: baseline; font-size: .82rem; }
-.powers-list .pname { font-weight: 900; white-space: nowrap; }
-.powers-list .ptext { color: var(--fg-muted); }
 .power-chip {
   display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; font-size: .74rem; font-weight: 800;
   padding: 3px 9px; border-radius: 999px; background: rgba(255, 61, 143, .14); border: 1px solid rgba(255, 61, 143, .5); color: #ffb3d3; cursor: help;

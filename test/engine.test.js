@@ -8,6 +8,7 @@ function makeGame(n = 2, { rng } = {}) {
   const g = new Game('TEST', { rng: rng || (() => 0) });
   const monsters = ['king', 'gigazaur', 'cyber_bunny', 'kraken', 'alienoid', 'meka_dragon'];
   for (let i = 0; i < n; i++) g.addPlayer(`p${i}`, `P${i}`, monsters[i]);
+  g.setOptions('p0', { powers: false }); // rules tests run under classic rules
   g.start('p0');
   return g;
 }
@@ -447,16 +448,19 @@ function plusGame(n = 6) {
 }
 const byMonster = (g, id) => g.players.find(p => p.monster === id);
 
-test('Game Plus option: host only, lobby only, off by default', () => {
+test('Game Plus option: on by default, host only, lobby only', () => {
   const g = new Game('OPTS');
   g.addPlayer('a', 'Ann', 'king');
   g.addPlayer('b', 'Bob', 'kraken');
-  assert.equal(g.options.powers, false);
-  assert.throws(() => g.setOptions('b', { powers: true }), /Only the host/);
-  g.setOptions('a', { powers: true });
-  assert.equal(g.publicState().options.powers, true);
+  assert.equal(g.options.powers, true, 'Game Plus is the default');
+  assert.throws(() => g.setOptions('b', { powers: false }), /Only the host/);
+  g.setOptions('a', { powers: false });
+  assert.equal(g.publicState().options.powers, false);
   g.start('a');
-  assert.throws(() => g.setOptions('a', { powers: false }), /before the game starts/);
+  assert.throws(() => g.setOptions('a', { powers: true }), /before the game starts/);
+  // an old snapshot that saved powers:false stays classic
+  const r = Game.fromJSON({ code: 'OLD', phase: 'lobby', options: { powers: false }, players: [] });
+  assert.equal(r.options.powers, false);
 });
 
 test('powers do nothing when Game Plus is off', () => {
@@ -590,7 +594,7 @@ test('events: card damage, blocks and knockouts are reported', () => {
 function plusTable(ids, { powers = true } = {}) {
   const g = new Game('PLUS2', { rng: () => 0 });
   ids.forEach((id, i) => g.addPlayer(`p${i}`, `P${i}`, id));
-  if (powers) g.setOptions('p0', { powers: true });
+  g.setOptions('p0', { powers });
   g.start('p0');
   return g;
 }

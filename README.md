@@ -160,12 +160,13 @@ can watch the dice and attack animations (`BOT_DELAY_MS`, default 900, and
 `BOT_ROLL_DELAY_MS`, default 2400). Bots run on the server, survive restarts,
 and never count as disconnected.
 
-### Game Plus (optional)
+### Game Plus (default) and classic rules
 
-In the base game every monster is identical; only the artwork differs. The
-host can switch on **Game Plus** in the waiting room to give each monster a
-unique power. It is off by default so the classic game is unchanged. The
-waiting room lists the powers of the monsters at the table.
+**Game Plus** is the standard game: every monster has a unique power. The home
+screen shows the power of the monster you have selected, and the waiting room
+shows each seated monster's power under its name. The host can switch Game
+Plus off in the waiting room for the classic rules, where every monster is
+identical and only the artwork differs.
 
 | Monster | Power | Effect |
 |---|---|---|

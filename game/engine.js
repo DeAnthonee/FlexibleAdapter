@@ -13,8 +13,8 @@
 import { CARDS, CARD_BY_ID, cardView } from './cards.js';
 
 export const FACES = ['1', '2', '3', 'heart', 'energy', 'claw'];
-// Each monster's `power` only applies when the host turns on the "Game Plus"
-// option in the waiting room. In the base game every monster is identical.
+// Each monster's `power` applies in "Game Plus" mode, which is on by default. The host
+// can switch it off in the waiting room for classic rules, where every monster is identical.
 export const MONSTERS = [
   { id: 'king', image: '/img/king.webp', thumb: '/img/king-thumb.webp', name: 'The King', emoji: '🦍', color: '#d08a3c',
     power: { name: 'King of the Hill', text: 'Gain 1 extra ★ whenever you start your turn in Tokyo.' } },
@@ -49,7 +49,7 @@ export const MONSTERS = [
   { id: 'kookie', image: '/img/kookie.webp', thumb: '/img/kookie-thumb.webp', name: 'Kookie', emoji: '🍪', color: '#e0a24a',
     power: { name: 'Snack Time', text: 'While in Tokyo, each ♥ you roll gives 1 ⚡ instead of nothing.' } },
 ];
-export const DEFAULT_OPTIONS = { powers: false };
+export const DEFAULT_OPTIONS = { powers: true }; // Game Plus is the standard game; the host can switch to classic rules
 
 export const MAX_PLAYERS = 6;
 export const MIN_PLAYERS = 2;
