@@ -130,6 +130,9 @@ npm test
     during your buy step; they receive the Energy.
   - **Psychic Probe** lets you force a reroll of one die of the monster
     whose turn it is, once per turn; a Heart discards the Probe.
+- Tap any monster board, or the monster in Tokyo, for a detail view: stats,
+  the monster's Game Plus power and every card it has in play, with full
+  text. The Tokyo slot shows the occupant's Life, stars and energy.
 - Reconnection after refresh. Any player can leave a running game (their
   monster is out, the rest keep playing). The host can end the game for
   everyone, and can remove a player who dropped offline.

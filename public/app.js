@@ -436,10 +436,15 @@
     box.innerHTML = '';
     const slot = (title, pid) => {
       const p = pid ? byId(pid) : null;
-      const s = el('div', { class: 'tokyo-slot' + (p ? ' occupied' : ''), 'data-pid': p ? p.id : null }, el('h4', {}, title));
+      const s = el('div', { class: 'tokyo-slot' + (p ? ' occupied' : ''), 'data-pid': p ? p.id : null, title: p ? 'Tap for details' : null, onclick: p ? () => openDetail(p.id) : null }, el('h4', {}, title));
       if (p) {
-        s.append(art(monster(p.monster), 'art tokyo-art'), el('div', { class: 'who' }, p.name));
-        if (p.id === me.playerId) s.append(el('div', { class: 'you-tag' }, 'that\'s you'));
+        const m = monster(p.monster);
+        s.append(art(m, 'art tokyo-art'), el('div', { class: 'tokyo-info' },
+          el('div', { class: 'who' }, p.name),
+          p.id === me.playerId ? el('div', { class: 'you-tag' }, 'that\'s you') : null,
+          statsRow(p, 'stats small'),
+          state.options && state.options.powers && m.power ? el('div', { class: 'power-chip', title: m.power.text }, '✨', el('span', {}, m.power.name)) : null,
+        ));
       }
       else s.append(el('div', { class: 'empty' }, 'Empty. Roll a 🐾 to move in.'));
       return s;
@@ -462,6 +467,9 @@
         class: 'pcard' + (p.id === t.playerId ? ' current' : '') + (p.alive ? '' : ' dead'),
         style: `--mc:${m.color}`,
         'data-pid': p.id,
+        title: 'Tap for details',
+        // mini-cards and buttons on the board have their own actions; anywhere else opens the detail view
+        onclick: (e) => { if (!e.target.closest('.mini-card, button')) openDetail(p.id); },
       });
       if (p.id === me.playerId) card.append(el('span', { class: 'you-tag' }, 'YOU'));
       card.append(el('div', { class: 'head' },
@@ -475,13 +483,7 @@
           p.left ? el('span', { class: 'badge off' }, 'left') : null,
         ),
       ));
-      card.append(el('div', { class: 'stats' },
-        el('span', { class: 'stat hp' }, `♥ ${p.hp}/${p.maxHp}`),
-        el('span', { class: 'stat vp' }, `★ ${p.vp}`),
-        el('span', { class: 'stat en' }, `⚡ ${p.energy}`),
-        p.poison ? el('span', { class: 'stat ctr' }, `☠ ${p.poison} poison`) : null,
-        p.shrink ? el('span', { class: 'stat ctr' }, `🔻 ${p.shrink} shrink`) : null,
-      ));
+      card.append(statsRow(p));
       card.append(el('div', { class: 'hpbar' }, el('div', { style: `width:${(100 * p.hp / Math.max(1, p.maxHp)).toFixed(0)}%` })));
       if (state.options && state.options.powers && m.power) {
         card.append(el('div', { class: 'power-chip', title: m.power.text }, '✨', el('span', {}, m.power.name)));
@@ -510,6 +512,60 @@
       }
       box.append(card);
     }
+  }
+
+  function statsRow(p, cls = 'stats') {
+    return el('div', { class: cls },
+      el('span', { class: 'stat hp' }, `♥ ${p.hp}/${p.maxHp}`),
+      el('span', { class: 'stat vp' }, `★ ${p.vp}`),
+      el('span', { class: 'stat en' }, `⚡ ${p.energy}`),
+      p.poison ? el('span', { class: 'stat ctr' }, `☠ ${p.poison} poison`) : null,
+      p.shrink ? el('span', { class: 'stat ctr' }, `🔻 ${p.shrink} shrink`) : null,
+    );
+  }
+
+  /** Detail view of one monster: stats, Game Plus power and every card in play, with full text. */
+  function openDetail(pid) { autoModal = 'detail:' + pid; renderDetail(); }
+  function renderDetail() {
+    const pid = autoModal && autoModal.startsWith('detail:') ? autoModal.slice(7) : null;
+    const p = pid ? byId(pid) : null;
+    if (!p) { if (pid) closeModal(); return; }
+    const m = monster(p.monster);
+    const inTokyo = state.tokyo.city === p.id || state.tokyo.bay === p.id;
+    const powersOn = !!(state.options && state.options.powers);
+    const cards = p.cards.map(c => {
+      const isMimic = c.id === 'mimic' && p.mimicTarget;
+      return el('div', { class: 'dcard' + (c.type === 'keep' ? ' keep' : ' discard') },
+        el('div', { class: 'dcard-head' },
+          el('b', {}, c.name),
+          el('span', { class: 'dcard-cost' }, `${c.cost} ⚡`),
+          el('span', { class: 'dcard-type' }, c.type === 'keep' ? 'Keep' : 'Discard')),
+        el('div', { class: 'dcard-text' }, c.text),
+        isMimic ? el('div', { class: 'dcard-text mimic' }, `Currently copying ${p.mimicTarget.name}: ${p.mimicTarget.text}`) : null,
+      );
+    });
+    openModal(autoModal,
+      el('div', { class: 'detail', style: `--mc:${m.color}` },
+        el('div', { class: 'detail-head' },
+          art(m, 'art detail-art'),
+          el('div', { class: 'detail-names' },
+            el('h2', {}, p.name),
+            el('div', { class: 'detail-monster' }, `${m.emoji} ${m.name}`),
+            el('div', { class: 'badges' },
+              inTokyo ? el('span', { class: 'badge' }, state.tokyo.city === p.id ? 'Tokyo City' : 'Tokyo Bay') : null,
+              p.alive ? null : el('span', { class: 'badge off' }, 'eliminated'),
+              p.bot ? el('span', { class: 'badge bot' }, '🤖 bot') : null,
+              !p.connected && p.alive && !p.bot ? el('span', { class: 'badge off' }, 'offline') : null,
+              p.id === me.playerId ? el('span', { class: 'badge you' }, 'you') : null))),
+        statsRow(p, 'stats detail-stats'),
+        el('div', { class: 'hpbar' }, el('div', { style: `width:${(100 * p.hp / Math.max(1, p.maxHp)).toFixed(0)}%` })),
+        powersOn && m.power
+          ? el('div', { class: 'detail-power' }, el('b', {}, `✨ ${m.power.name}`), el('span', {}, m.power.text))
+          : el('div', { class: 'detail-power classic' }, 'Classic rules: no monster power.'),
+        el('h3', { class: 'detail-h3' }, cards.length ? `Cards in play (${cards.length})` : 'No power cards yet'),
+        cards.length ? el('div', { class: 'detail-cards' }, cards) : el('p', { class: 'hint', style: 'margin:0' }, 'Cards bought from the shop show up here with their full text.'),
+        el('div', { class: 'action-row' }, el('button', { class: 'btn', onclick: closeModal }, 'Close')),
+      ));
   }
 
   /** On phones the monster boards scroll sideways: bring the active player's board into view. */
@@ -792,6 +848,7 @@
     autoModal = kind;
   }
   function closeModal() { $('#modal').hidden = true; autoModal = null; }
+  $('#modal').addEventListener('click', (e) => { if (e.target === e.currentTarget && autoModal && autoModal.startsWith('detail:')) closeModal(); });
 
   function confirmModal(text, onYes, yesLabel = 'Yes') {
     openModal('confirm', el('h2', {}, 'Are you sure?'), el('p', {}, text), el('div', { class: 'action-row' },
@@ -865,7 +922,8 @@
       );
       return;
     }
-    // Close automatic modals that no longer apply (keep confirms and pickers open).
+    // Close automatic modals that no longer apply (keep confirms, pickers and the detail view open).
+    if (autoModal && autoModal.startsWith('detail:')) { renderDetail(); return; }
     if (autoModal && autoModal !== 'confirm' && autoModal !== 'pick') closeModal();
   }
 
