@@ -60,7 +60,7 @@ test('an all-bot table plays complete games without errors (fuzz)', () => {
     g.addPlayer('h', 'Host', pool[0]);
     const n = 2 + (seed % 5); // 3 to 7 requested -> capped at 6 seats
     for (let i = 0; i < n && g.players.length < 6; i++) g.addPlayer(`b${i}`, `Bot ${i}`, pool[i + 1], { bot: true });
-    if (seed % 2) g.setOptions('h', { powers: true });
+    g.setOptions('h', { powers: seed % 2 === 1 }); // half the games classic, half Game Plus
     g.start('h');
     g.player('h').bot = true; // the whole table runs itself
     actions += runBots(g, 20000);

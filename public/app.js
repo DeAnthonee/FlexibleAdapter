@@ -57,23 +57,24 @@
   let lastBuyKey = '';      // detects the moment my buy step starts (auto-open the shop sheet on phones)
   const isMobile = () => window.matchMedia('(max-width: 720px), (max-height: 540px)').matches;
 
+  // Mirrors MONSTERS in game/engine.js so the home screen works before the first server message.
   const FALLBACK_MONSTERS = [
-    { id: 'king', image: '/img/king.webp', thumb: '/img/king-thumb.webp', name: 'The King', emoji: '🦍', color: '#d08a3c' },
-    { id: 'gigazaur', image: '/img/gigazaur.webp', thumb: '/img/gigazaur-thumb.webp', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c' },
-    { id: 'cyber_bunny', image: '/img/cyber_bunny.webp', thumb: '/img/cyber_bunny-thumb.webp', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2' },
-    { id: 'kraken', image: '/img/kraken.webp', thumb: '/img/kraken-thumb.webp', name: 'Kraken', emoji: '🐙', color: '#5b7cff' },
-    { id: 'alienoid', image: '/img/alienoid.webp', thumb: '/img/alienoid-thumb.webp', name: 'Alienoid', emoji: '👽', color: '#9ad53a' },
-    { id: 'meka_dragon', image: '/img/meka_dragon.webp', thumb: '/img/meka_dragon-thumb.webp', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff' },
-    { id: 'cybertooth', image: '/img/cybertooth.webp', thumb: '/img/cybertooth-thumb.webp', name: 'Cybertooth', emoji: '🐯', color: '#ff6a3d' },
-    { id: 'boogie_woogie', image: '/img/boogie_woogie.webp', thumb: '/img/boogie_woogie-thumb.webp', name: 'Boogie Woogie', emoji: '👻', color: '#c45cff' },
-    { id: 'sheriff', image: '/img/sheriff.webp', thumb: '/img/sheriff-thumb.webp', name: 'Sheriff', emoji: '🤠', color: '#c98a4b' },
-    { id: 'cthulhu', image: '/img/cthulhu.webp', thumb: '/img/cthulhu-thumb.webp', name: 'Cthulhu', emoji: '🦑', color: '#3fae8a' },
-    { id: 'space_penguin', image: '/img/space_penguin.webp', thumb: '/img/space_penguin-thumb.webp', name: 'Space Penguin', emoji: '🐧', color: '#8fd8ff' },
-    { id: 'anubis', image: '/img/anubis.webp', thumb: '/img/anubis-thumb.webp', name: 'Anubis', emoji: '🐺', color: '#f2c230' },
-    { id: 'cyber_kitty', image: '/img/cyber_kitty.webp', thumb: '/img/cyber_kitty-thumb.webp', name: 'Cyber Kitty', emoji: '🐱', color: '#4fc3ff' },
-    { id: 'pumpkin_jack', image: '/img/pumpkin_jack.webp', thumb: '/img/pumpkin_jack-thumb.webp', name: 'Pumpkin Jack', emoji: '🎃', color: '#ff7a1a' },
-    { id: 'pandakai', image: '/img/pandakai.webp', thumb: '/img/pandakai-thumb.webp', name: 'Pandakaï', emoji: '🐼', color: '#8fd14f' },
-    { id: 'kookie', image: '/img/kookie.webp', thumb: '/img/kookie-thumb.webp', name: 'Kookie', emoji: '🍪', color: '#e0a24a' },
+    { id: 'king', image: '/img/king.webp', thumb: '/img/king-thumb.webp', name: 'The King', emoji: '🦍', color: '#d08a3c', power: { name: 'King of the Hill', text: 'Gain 1 extra ★ whenever you start your turn in Tokyo.' } },
+    { id: 'gigazaur', image: '/img/gigazaur.webp', thumb: '/img/gigazaur-thumb.webp', name: 'Gigazaur', emoji: '🦖', color: '#5cb85c', power: { name: 'Regenerating Scales', text: 'At the end of your turn, heal 1 if you are outside Tokyo.' } },
+    { id: 'cyber_bunny', image: '/img/cyber_bunny.webp', thumb: '/img/cyber_bunny-thumb.webp', name: 'Cyber Bunny', emoji: '🐰', color: '#ff5fa2', power: { name: 'Overclocked', text: 'You get one extra reroll every turn.' } },
+    { id: 'kraken', image: '/img/kraken.webp', thumb: '/img/kraken-thumb.webp', name: 'Kraken', emoji: '🐙', color: '#5b7cff', power: { name: 'Ink Cloud', text: 'The first attack that hits you each turn deals 1 less damage.' } },
+    { id: 'alienoid', image: '/img/alienoid.webp', thumb: '/img/alienoid-thumb.webp', name: 'Alienoid', emoji: '👽', color: '#9ad53a', power: { name: 'Energy Siphon', text: 'Gain 1 ⚡ at the end of each of your turns.' } },
+    { id: 'meka_dragon', image: '/img/meka_dragon.webp', thumb: '/img/meka_dragon-thumb.webp', name: 'Meka Dragon', emoji: '🐉', color: '#b45cff', power: { name: 'Rocket Punch', text: 'Deal 1 extra damage when you attack from outside Tokyo.' } },
+    { id: 'cybertooth', image: '/img/cybertooth.webp', thumb: '/img/cybertooth-thumb.webp', name: 'Cybertooth', emoji: '🐯', color: '#ff6a3d', power: { name: 'Bite Back', text: 'The first monster to hit you each turn takes 1 damage.' } },
+    { id: 'boogie_woogie', image: '/img/boogie_woogie.webp', thumb: '/img/boogie_woogie-thumb.webp', name: 'Boogie Woogie', emoji: '👻', color: '#c45cff', power: { name: 'Showstopper', text: 'Gain 1 ★ the first time each turn you damage a monster in Tokyo.' } },
+    { id: 'sheriff', image: '/img/sheriff.webp', thumb: '/img/sheriff-thumb.webp', name: 'Sheriff', emoji: '🤠', color: '#c98a4b', power: { name: 'New Sheriff in Town', text: 'Gain 2 ★ instead of 1 when you enter Tokyo.' } },
+    { id: 'cthulhu', image: '/img/cthulhu.webp', thumb: '/img/cthulhu-thumb.webp', name: 'Cthulhu', emoji: '🦑', color: '#3fae8a', power: { name: 'Dreaming Deep', text: 'End your turn in Tokyo: gain 2 ⚡, then 3, then 4 for each turn in a row you stay. Resets when you leave.' } },
+    { id: 'space_penguin', image: '/img/space_penguin.webp', thumb: '/img/space_penguin-thumb.webp', name: 'Space Penguin', emoji: '🐧', color: '#8fd8ff', power: { name: 'Ice Slide', text: 'Heal 1 whenever you yield Tokyo.' } },
+    { id: 'anubis', image: '/img/anubis.webp', thumb: '/img/anubis-thumb.webp', name: 'Anubis', emoji: '🐺', color: '#f2c230', power: { name: 'Judgement', text: 'Each triple of numbers scores 1 extra ★.' } },
+    { id: 'cyber_kitty', image: '/img/cyber_kitty.webp', thumb: '/img/cyber_kitty-thumb.webp', name: 'Cyber Kitty', emoji: '🐱', color: '#4fc3ff', power: { name: 'Purr-charged', text: 'Rolling 3 or more ⚡ gives 1 extra ⚡.' } },
+    { id: 'pumpkin_jack', image: '/img/pumpkin_jack.webp', thumb: '/img/pumpkin_jack-thumb.webp', name: 'Pumpkin Jack', emoji: '🎃', color: '#ff7a1a', power: { name: 'Trick or Treat', text: 'Cards cost 2 ⚡ less, minimum 2.' } },
+    { id: 'pandakai', image: '/img/pandakai.webp', thumb: '/img/pandakai-thumb.webp', name: 'Pandakaï', emoji: '🐼', color: '#8fd14f', power: { name: 'Bamboo Bulk', text: 'Start with 13 Life instead of 10.' } },
+    { id: 'kookie', image: '/img/kookie.webp', thumb: '/img/kookie-thumb.webp', name: 'Kookie', emoji: '🍪', color: '#e0a24a', power: { name: 'Snack Time', text: 'While in Tokyo, each ♥ you roll gives 1 ⚡ instead of nothing.' } },
   ];
   monsters = FALLBACK_MONSTERS;
   const monster = (id) => monsters.find(m => m.id === id) || { name: '?', emoji: '❓', color: '#888' };
@@ -229,6 +230,11 @@
         onclick: () => { if (taken) return; selectedMonster = m.id; renderMonsterPicker(); },
       }, art(m, 'art pick-art'), el('span', { class: 'name' }, m.name)));
     }
+    const sel = selectedMonster ? monster(selectedMonster) : null;
+    const pv = $('#power-preview');
+    pv.innerHTML = '';
+    if (sel && sel.power) pv.append('✨ ', el('b', {}, sel.power.name), ' — ', sel.power.text);
+    else pv.textContent = 'Every monster has a unique power in Game Plus. Tap one to see it.';
   }
 
   /** A friend opened an invite link: lock the code in and make joining the obvious next step. */
@@ -307,30 +313,29 @@
     $('#btn-share').textContent = navigator.share ? '📤 Invite friends' : '📤 Copy invite link';
     const list = $('#lobby-players');
     list.innerHTML = '';
+    const powersOn = !!(state.options && state.options.powers);
     for (const p of state.players) {
       const m = monster(p.monster);
       list.append(el('li', { style: `--mc:${m.color}` },
         art(m, 'art lobby-art', { thumb: true }),
-        el('span', {}, el('b', {}, p.name)),
-        p.bot ? el('span', { class: 'tag' }, '🤖 computer') : null,
-        !p.connected && !p.bot ? el('span', { class: 'tag', style: 'color:var(--fg-muted)' }, 'reconnecting…') : null,
-        p.id === state.hostId ? el('span', { class: 'tag' }, 'host') : null,
-        p.id === me.playerId ? el('span', { class: 'tag' }, 'you') : null,
-        p.bot && state.hostId === me.playerId ? el('button', { class: 'btn tiny remove-bot', title: 'Remove this computer player', onclick: () => send({ type: 'removeBot', botId: p.id }) }, '✕') : null,
+        el('span', { class: 'who' },
+          el('span', { class: 'who-top' },
+            el('b', {}, p.name),
+            p.bot ? el('span', { class: 'tag' }, '🤖 bot') : null,
+            !p.connected && !p.bot ? el('span', { class: 'tag', style: 'color:var(--fg-muted)' }, 'reconnecting…') : null,
+            p.id === state.hostId ? el('span', { class: 'tag' }, 'host') : null,
+            p.id === me.playerId ? el('span', { class: 'tag' }, 'you') : null,
+            p.bot && state.hostId === me.playerId ? el('button', { class: 'btn tiny remove-bot', title: 'Remove this computer player', onclick: () => send({ type: 'removeBot', botId: p.id }) }, '✕') : null),
+          powersOn && m.power ? el('small', { class: 'power-line' }, el('b', {}, m.power.name), ' · ', m.power.text) : null),
       ));
     }
     const isHost = state.hostId === me.playerId;
     $('#bot-row').hidden = !isHost;
     $('#btn-add-bot').disabled = state.players.length >= 6;
-    const powersOn = !!(state.options && state.options.powers);
     const chk = $('#opt-powers');
     chk.checked = powersOn;
     chk.disabled = !isHost;
     $('.toggle').title = isHost ? '' : 'Only the host can change this.';
-    const pl = $('#powers-list');
-    pl.hidden = !powersOn;
-    pl.innerHTML = '';
-    if (powersOn) for (const pp of state.players) { const m = monster(pp.monster); if (m.power) pl.append(el('li', {}, el('span', {}, m.emoji), el('span', { class: 'pname' }, `${m.name}: ${m.power.name}.`), el('span', { class: 'ptext' }, m.power.text))); }
     $('#btn-start').hidden = !isHost;
     $('#btn-start').disabled = state.players.length < 2;
     $('#lobby-hint').textContent = state.players.length < 2
