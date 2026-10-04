@@ -174,6 +174,39 @@ test('a waiting-room player who drops offline keeps the seat (and host) during t
   } finally { await stopServer(s); }
 });
 
+test('the shutdown log reports what was actually persisted and why rooms were skipped', async () => {
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'kot-'));
+  const s = await startServer({ DATA_DIR: dataDir });
+  let keptCode, endedCode;
+  try {
+    // one game that will be kept (waiting room), one the host ends before shutdown
+    const a = await new Client(s.port).open();
+    a.send({ type: 'create', name: 'Ann', monster: 'king' });
+    keptCode = (await a.next('joined')).code;
+    const h = await new Client(s.port).open();
+    h.send({ type: 'create', name: 'Host', monster: 'kraken' });
+    endedCode = (await h.next('joined')).code;
+    h.send({ type: 'addBot' });
+    await h.waitState(st => st.players.length === 2);
+    h.send({ type: 'start' });
+    await h.waitState(st => st.phase === 'playing');
+    h.send({ type: 'action', action: { type: 'endGame' } });
+    await h.waitState(st => st.phase === 'ended');
+    a.close(); h.close();
+    await new Promise(r => setTimeout(r, 100));
+  } finally { await stopServer(s); }
+  const log = s.log();
+  assert.match(log, /2 room\(s\) in memory, saved 1 game\(s\); skipped 1 \(\w{4}: finished\)/, log);
+  assert.ok(log.includes(`${endedCode}: finished`), 'the finished room is named');
+  const s2 = await startServer({ DATA_DIR: dataDir });
+  try {
+    assert.match(s2.log(), /1 game\(s\) restored/);
+    const res = await fetch(`http://127.0.0.1:${s2.port}/health`);
+    assert.equal((await res.json()).games, 1);
+    assert.ok(keptCode, 'the waiting-room game was kept');
+  } finally { await stopServer(s2); fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 test('every connection is greeted with the running version', async () => {
   const s = await startServer({ DATA_DIR: 'none' });
   try {
