@@ -11,16 +11,24 @@
  */
 (() => {
   const PREFS_KEY = 'kot.audio';
+  const POS_KEY = 'kot.musicPos';   // where the track was, so a reload (e.g. an auto-update) resumes in place
   const TRACK = '/audio/music.mp3';
-  const prefs = { music: 0.35, muted: false };
-  try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch {}
+  const DEFAULT_MUSIC = 0.10;       // quiet by default; players turn it up in the sound panel
+  const PREFS_V = 2;                // bump when a default changes so saved settings pick it up once
+  const prefs = { music: DEFAULT_MUSIC, muted: false, v: PREFS_V };
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    if (saved && saved.v === PREFS_V) Object.assign(prefs, saved);
+    else if (saved && typeof saved.muted === 'boolean') prefs.muted = saved.muted; // keep mute, take the new default volume
+  } catch {}
   const meta = document.querySelector('meta[name="app-version"]');
   const version = meta && meta.content ? meta.content : '';
   const AC = window.AudioContext || window.webkitAudioContext;
 
   let ctx = null, master = null, musicGain = null, fade = null;
   let buffer = null, loading = null, source = null;
-  let wanted = false;           // the current screen wants music
+  let startedAt = 0, startOffset = 0; // for remembering the playback position across reloads
+  let wanted = true;            // music plays on every screen, from the first tap onward
   let unlocked = false;         // a user gesture has happened
   let track = 'unknown';        // unknown | loading | ready | missing | error
   const listeners = new Set();
@@ -65,13 +73,30 @@
     return loading;
   }
 
+  function savedPosition() {
+    try {
+      const p = JSON.parse(sessionStorage.getItem(POS_KEY) || 'null');
+      if (p && buffer && Date.now() - p.at < 10 * 60 * 1000 && p.pos >= 0 && p.pos < buffer.duration) return p.pos;
+    } catch {}
+    return 0;
+  }
+  function position() {
+    if (!ctx || !buffer || !source) return 0;
+    return (startOffset + (ctx.currentTime - startedAt)) % buffer.duration;
+  }
+  function rememberPosition() { if (source) { try { sessionStorage.setItem(POS_KEY, JSON.stringify({ pos: position(), at: Date.now() })); } catch {} } }
+  window.addEventListener('pagehide', rememberPosition);
+  setInterval(rememberPosition, 5000);
+
   function startSource() {
     if (!ctx || !buffer || source) return;
     source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
     source.connect(fade);
-    source.start();
+    startOffset = savedPosition();
+    startedAt = ctx.currentTime;
+    source.start(0, startOffset);
     const t = ctx.currentTime;
     fade.gain.cancelScheduledValues(t);
     fade.gain.setValueAtTime(0, t);
@@ -79,6 +104,7 @@
   }
   function stopSource() {
     if (!ctx || !source) return;
+    rememberPosition();
     const s = source;
     source = null;
     const t = ctx.currentTime;
@@ -109,11 +135,11 @@
   document.addEventListener('visibilitychange', () => { sync(); });
 
   function state() {
-    return { music: prefs.music, muted: prefs.muted, playing: !!source, track, wanted, unlocked, supported: !!AC };
+    return { music: prefs.music, muted: prefs.muted, playing: !!source, track, wanted, unlocked, supported: !!AC, position: position() };
   }
 
   window.KotAudio = {
-    /** Tell the player whether the current screen wants music. */
+    /** Turn the music on or off (it is on by default, on every screen). */
     music(on) { wanted = !!on; if (wanted && !buffer) loadTrack(); sync(); },
     setMusicVolume(v) { prefs.music = Math.max(0, Math.min(1, Number(v) || 0)); applyPrefs(); save(); notify(); },
     setMuted(m) { prefs.muted = !!m; applyPrefs(); save(); notify(); },

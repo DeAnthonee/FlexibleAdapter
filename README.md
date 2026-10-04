@@ -158,10 +158,11 @@ npm test
 
 ### Sound
 
-Background music loops in the waiting room and during the game, starting on
-the first tap (browsers block audio before a gesture) and pausing while the
-tab is hidden. The speaker button opens a panel with a volume slider and a
-mute switch; the choice is remembered per device. The track is
+Background music loops on every screen, from the first tap on the home page
+onward (browsers block audio before a gesture), pausing while the tab is
+hidden. It starts at 10 % volume; the speaker button on each screen opens a
+panel with a volume slider and a mute switch, and the choice is remembered per
+device. When the page reloads for an update the music resumes where it was. The track is
 `public/audio/music.mp3`; see `public/audio/README.md` for how to replace it.
 
 ### Practice mode (computer players)
