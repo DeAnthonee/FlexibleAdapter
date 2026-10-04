@@ -151,7 +151,6 @@
   // ------------------------------------------------------------ screens
   function show(id) {
     for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
-    if (window.KotAudio) KotAudio.music(id === 'screen-game' || id === 'screen-lobby');
   }
 
   // ------------------------------------------------------------ websocket
@@ -406,7 +405,7 @@
       : s.track === 'missing' ? 'No music track installed yet.'
       : s.track === 'error' ? 'The music track could not be loaded.'
       : s.track === 'loading' ? 'Loading the music…'
-      : s.playing ? 'Music is playing.' : s.wanted ? 'Music starts after your first tap.' : 'Music plays in the waiting room and during the game.';
+      : s.playing ? 'Music is playing.' : 'Music starts after your first tap.';
     openModal('sound',
       el('h2', {}, '🎵 Sound'),
       el('div', { class: 'sound-row' }, el('label', {}, 'Music'), slider, pct),
@@ -418,9 +417,11 @@
     const icon = !s || s.muted || s.music === 0 ? '🔇' : '🔊';
     $('#btn-sound').textContent = icon;
     $('#btn-sound-lobby').textContent = `${icon} Sound`;
+    $('#btn-sound-home').textContent = `${icon} Sound`;
   }
   $('#btn-sound').addEventListener('click', soundPanel);
   $('#btn-sound-lobby').addEventListener('click', soundPanel);
+  $('#btn-sound-home').addEventListener('click', soundPanel);
   if (window.KotAudio) { paintSound(KotAudio.state()); KotAudio.onChange((s) => { paintSound(s); if (autoModal === 'sound') { const st = $('#modal .sound-status'); if (st) st.textContent = s.playing ? 'Music is playing.' : st.textContent; } }); }
 
   const closeSheets = () => document.body.classList.remove('shop-open', 'log-open');
@@ -989,6 +990,7 @@
   }
 
   // ------------------------------------------------------------ boot
+  if (window.KotAudio) KotAudio.preload();
   renderMonsterPicker();
   show('screen-home');
   connect();
