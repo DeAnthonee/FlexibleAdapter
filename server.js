@@ -301,6 +301,8 @@ wss.on('connection', (ws) => {
   ws.tokens = RATE_BURST;
   ws.lastRefill = Date.now();
   ws.on('pong', () => { ws.isAlive = true; });
+  // Tell the page which build is running so a page from an older deploy can reload itself.
+  send(ws, { type: 'hello', version: VERSION });
 
   ws.on('message', (raw) => {
     // Token bucket: humans click a few times a second at most.

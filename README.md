@@ -69,8 +69,12 @@ The version in `package.json` is shown on every screen (home, waiting room and
 the game bar) and in `/health`, so players and the host can tell which build
 they are looking at. Every change bumps it: a patch bump (`1.1.0` → `1.1.1`)
 for tweaks and fixes, a minor bump (`1.1.0` → `1.2.0`) for new features. When
-a newer build goes live, open pages show a "New version is live, tap to
-reload" chip; the running game is unaffected because state lives on the server.
+a newer build goes live, open pages pick it up on their own (see below); the running game is unaffected because state lives on the server.
+In practice the page reloads itself: the server reports its version when a
+page connects and with every update, so after a deploy every open page
+reloads once and rejoins its game with the new code. A page that has already
+reloaded for a version and still sees a mismatch shows the chip instead, so
+a proxy serving mixed builds can never cause a reload loop.
 
 The server stamps the version into the page: `index.html` is served with
 `Cache-Control: no-cache` and every local asset is referenced as
