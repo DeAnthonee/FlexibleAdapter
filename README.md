@@ -72,6 +72,14 @@ for tweaks and fixes, a minor bump (`1.1.0` → `1.2.0`) for new features. When
 a newer build goes live, open pages show a "New version is live, tap to
 reload" chip; the running game is unaffected because state lives on the server.
 
+The server stamps the version into the page: `index.html` is served with
+`Cache-Control: no-cache` and every local asset is referenced as
+`/app.js?v=1.2.1`, `/style.css?v=…`, `/img/….webp?v=…`. A versioned asset URL
+is served with a one-year `immutable` cache header, an unversioned one with
+`no-cache`. So browsers and CDNs (Cloudflare caches scripts for four hours by
+default) can cache aggressively, yet every deploy changes the URLs and players
+get the new code on their next page load.
+
 Load test against a running server (not part of `npm test`):
 
 ```bash

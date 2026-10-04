@@ -75,22 +75,39 @@ const server = http.createServer((req, res) => {
   file = path.normalize(file).replace(/^(\.\.[/\\])+/, '');
   const full = path.join(PUBLIC_DIR, file);
   if (!full.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end(); return; }
+  if (file === '/index.html') { sendIndex(res); return; }
   fs.readFile(full, (err, data) => {
-    if (err) {
-      // Single-page app: unknown paths fall back to index.html (e.g. /ABCD join links).
-      fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, html) => {
-        if (e2) { res.writeHead(404); res.end('Not found'); return; }
-        res.writeHead(200, { 'Content-Type': MIME['.html'] });
-        res.end(html);
-      });
-      return;
-    }
+    if (err) { sendIndex(res); return; } // Single-page app: unknown paths fall back to index.html (e.g. /ABCD join links)
     const ext = path.extname(full);
-    const cache = ext === '.webp' || ext === '.png' ? 'public, max-age=86400' : 'no-cache';
+    // Assets are referenced as /app.js?v=<version> (see sendIndex), so a versioned URL can be
+    // cached forever by browsers and CDNs: every deploy changes the URL. Unversioned requests
+    // stay revalidated so nothing stale survives a deploy.
+    const cache = url.searchParams.get('v') === VERSION ? 'public, max-age=31536000, immutable' : 'no-cache';
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
     res.end(data);
   });
 });
+
+/**
+ * Serve index.html with the package version stamped into every local asset URL
+ * (/app.js -> /app.js?v=1.2.0) and into a <meta name="app-version"> tag, so a
+ * fresh page always loads matching code even behind a CDN that caches scripts.
+ */
+function sendIndex(res) {
+  fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (err, html) => {
+    if (err) { res.writeHead(404); res.end('Not found'); return; }
+    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+    res.end(stampVersion(html, VERSION));
+  });
+}
+
+/** Append ?v=<version> to local src/href attributes and add the app-version meta tag. */
+function stampVersion(html, version) {
+  const v = encodeURIComponent(version);
+  return html
+    .replace(/(src|href)="(\/[^"?]+\.(?:js|css|webp|png|svg|ico))"/g, `$1="$2?v=${v}"`)
+    .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  <meta name="app-version" content="${v}">`);
+}
 
 function getRoom(code) {
   const room = games.get(code);

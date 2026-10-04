@@ -171,3 +171,26 @@ test('a waiting-room player who drops offline keeps the seat (and host) during t
     g.close();
   } finally { await stopServer(s); }
 });
+
+test('index.html is version-stamped and only versioned assets are long-cached', async () => {
+  const s = await startServer({ DATA_DIR: 'none' });
+  try {
+    const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+    for (const p of ['/', '/ABCD']) { // home and a join link (SPA fallback)
+      const res = await fetch(`http://127.0.0.1:${s.port}${p}`);
+      assert.equal(res.headers.get('cache-control'), 'no-cache', `${p} is revalidated`);
+      const html = await res.text();
+      assert.ok(html.includes(`<meta name="app-version" content="${version}">`), `${p} carries the version`);
+      assert.ok(html.includes(`src="/app.js?v=${version}"`), `${p} loads versioned app.js`);
+      assert.ok(html.includes(`href="/style.css?v=${version}"`), `${p} loads versioned style.css`);
+      assert.ok(!/src="\/[^"?]+\.webp"/.test(html), `${p} has no unversioned images`);
+    }
+    const fresh = await fetch(`http://127.0.0.1:${s.port}/app.js?v=${version}`);
+    assert.equal(fresh.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    const stale = await fetch(`http://127.0.0.1:${s.port}/app.js?v=0.0.1`);
+    assert.equal(stale.headers.get('cache-control'), 'no-cache');
+    const bare = await fetch(`http://127.0.0.1:${s.port}/app.js`);
+    assert.equal(bare.headers.get('cache-control'), 'no-cache');
+    assert.equal((await bare.text()).length, (await fresh.text()).length, 'same file either way');
+  } finally { await stopServer(s); }
+});
