@@ -83,7 +83,7 @@
   function art(m, cls = 'art', { thumb = false } = {}) {
     const src = thumb ? m.thumb : m.image;
     if (!src) return el('span', { class: cls + ' emoji' }, m.emoji);
-    const img = el('img', { class: cls, src, alt: m.name, draggable: 'false' });
+    const img = el('img', { class: cls, src: versioned(src), alt: m.name, draggable: 'false' });
     img.addEventListener('error', () => img.replaceWith(el('span', { class: cls + ' emoji' }, m.emoji)));
     return img;
   }
@@ -92,7 +92,13 @@
   function paintVersion(v) {
     for (const e of document.querySelectorAll('.version')) e.textContent = v ? `v${v}` : '';
   }
-  fetch('/health', { cache: 'no-store' }).then(r => r.json()).then(h => { appVersion = h.version; paintVersion(h.version); }).catch(() => {});
+  // The server stamps its version into the page (and into every asset URL) so the code and
+  // the page always match; /health is only a fallback for a page served some other way.
+  const stamped = document.querySelector('meta[name="app-version"]');
+  if (stamped && stamped.content) { appVersion = stamped.content; paintVersion(appVersion); }
+  else fetch('/health', { cache: 'no-store' }).then(r => r.json()).then(h => { appVersion = h.version; paintVersion(h.version); }).catch(() => {});
+  /** Local asset URL with the version stamped in, so CDN/browser caches never hand out an old file. */
+  const versioned = (src) => (appVersion && src.startsWith('/') ? `${src}?v=${encodeURIComponent(appVersion)}` : src);
   /** After a deploy the server is newer than this page: offer a reload (seats survive it). */
   function noticeServerVersion(v) {
     if (!v || !appVersion || v === appVersion) return;
