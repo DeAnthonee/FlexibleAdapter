@@ -193,12 +193,13 @@ export class Game {
     return p;
   }
 
-  /** Host adds a computer player on the first free monster. Returns the new player. */
+  /** Host adds a computer player on a random free monster. Returns the new player. */
   addBot(byId) {
     if (this.phase !== 'lobby') throw new GameError('Computer players can only be added before the game starts.');
     if (byId !== this.hostId) throw new GameError('Only the host can add computer players.');
-    const free = MONSTERS.find(m => !this.players.some(p => p.monster === m.id));
-    if (!free) throw new GameError('Every monster is taken.');
+    const pool = MONSTERS.filter(m => !this.players.some(p => p.monster === m.id));
+    if (!pool.length) throw new GameError('Every monster is taken.');
+    const free = pool[Math.floor(this.rng() * pool.length)];
     const id = 'bot-' + Math.random().toString(36).slice(2, 10);
     return this.addPlayer(id, `Bot ${free.name}`, free.id, { bot: true });
   }

@@ -30,7 +30,8 @@ test('host adds and removes computer players in the lobby', () => {
   g.addPlayer('h', 'Host', 'king');
   const b1 = g.addBot('h');
   assert.equal(b1.bot, true);
-  assert.equal(b1.monster, 'gigazaur', 'first free monster');
+  assert.notEqual(b1.monster, 'king', 'never a taken monster');
+  assert.ok(MONSTERS.some(m => m.id === b1.monster), 'a real monster');
   assert.equal(b1.connected, true);
   assert.throws(() => g.addBot('nobody'), /Only the host/);
   g.removeBot('h', b1.id);
@@ -38,6 +39,22 @@ test('host adds and removes computer players in the lobby', () => {
   g.addBot('h'); g.addBot('h');
   assert.equal(g.players.filter(p => p.bot).length, 2);
   assert.equal(g.hostId, 'h', 'a bot never becomes host');
+});
+
+test('bots take a random free monster, never a duplicate', () => {
+  const seen = new Set();
+  for (let seed = 1; seed <= 30; seed++) {
+    const g = new Game('RND', { rng: seeded(seed * 104729) }); // spread seeds: consecutive LCG seeds give near-identical first draws
+    g.addPlayer('h', 'Host', 'king');
+    g.addBot('h');
+    seen.add(g.players[1].monster);
+  }
+  assert.ok(seen.size >= 5, `bots varied across games (saw ${[...seen].join(', ')})`);
+  const g = new Game('FULL', { rng: seeded(7) });
+  g.addPlayer('h', 'Host', 'king');
+  for (let i = 0; i < 5; i++) g.addBot('h');
+  assert.equal(new Set(g.players.map(p => p.monster)).size, 6, 'six different monsters at a full table');
+  assert.throws(() => g.addBot('h'), /full|taken/i);
 });
 
 test('bots never disconnect and keep answering questions after a restore', () => {

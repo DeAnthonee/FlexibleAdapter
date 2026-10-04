@@ -168,7 +168,7 @@ device. When the page reloads for an update the music resumes where it was. The 
 ### Practice mode (computer players)
 
 For testing on your own, the host can add computer players in the waiting room
-(**Add computer player**), or use **Practice vs computers** on the home screen
+(**Add computer player**; each takes a random free monster), or use **Practice vs computers** on the home screen
 to start a lobby with two bots seated. Bots play a simple strategy: keep claws
 when someone is in Tokyo, keep hearts when hurt, chase triples, yield when low,
 use Wings when low, buy a card they can afford, end the turn. They pause so you
