@@ -722,6 +722,17 @@ test('Pumpkin Jack: Trick or Treat makes cards 2 cheaper, never below 2', () => 
   j.cards.push('alien_metabolism');
   assert.equal(g.cardCost(j, CARD_BY_ID.heal), 1, 'Alien Metabolism still stacks');
   assert.equal(g.cardCost(byMonster(g, 'king'), CARD_BY_ID.heal), 3);
+  // and a real purchase charges the discounted price
+  j.cards = [];
+  g.startTurn(j.id);
+  forceDice(g, ['1', '2', '3', '1', '2', '3']);
+  g.shop = ['extra_head_1', 'heal', 'corner_store']; // 7, 3, 3 printed
+  j.energy = 5;
+  g.act(j.id, { type: 'buy', index: 0 });
+  assert.ok(j.cards.includes('extra_head_1'), 'bought a 7-cost card with 5 energy');
+  assert.equal(j.energy, 0, 'paid 5');
+  j.energy = 1;
+  assert.throws(() => g.act(j.id, { type: 'buy', index: 1 }), /afford|energy/i, 'a 3-cost card still costs 2');
 });
 
 test('Pandakaï: Bamboo Bulk starts at 13 Life only in Game Plus', () => {

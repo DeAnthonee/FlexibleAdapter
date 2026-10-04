@@ -190,7 +190,7 @@ identical and only the artwork differs.
 | Space Penguin | Ice Slide | Heal 1 whenever you yield Tokyo. |
 | Anubis | Judgement | Each triple of numbers scores 1 extra ★. |
 | Cyber Kitty | Purr-charged | Rolling 3 or more ⚡ gives 1 extra ⚡. |
-| Pumpkin Jack | Trick or Treat | Cards cost 2 ⚡ less, minimum 2. Alien Metabolism still takes 1 more off. |
+| Pumpkin Jack | Trick or Treat | Cards cost 2 ⚡ less, minimum 2. Alien Metabolism still takes 1 more off. The shop shows the printed price struck out next to the discounted one. |
 | Pandakaï | Bamboo Bulk | Start with 13 Life instead of 10. |
 | Kookie | Snack Time | While in Tokyo, each ♥ you roll gives 1 ⚡ instead of nothing. |
 

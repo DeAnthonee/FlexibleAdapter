@@ -451,6 +451,10 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
   font-family: var(--display); font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 3px 8px rgba(0, 0, 0, .5), inset 0 -2px 0 rgba(0, 0, 0, .2);
 }
+.card .cost.deal { background: radial-gradient(circle at 35% 30%, #fff1b0, var(--neon-2) 65%); color: #2b1300; box-shadow: 0 0 0 2px rgba(255, 209, 102, .5), 0 0 14px rgba(255, 209, 102, .7); animation: dealpulse 1.4s ease-in-out infinite; }
+@keyframes dealpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.card .was { margin-left: 6px; font-size: .7rem; font-weight: 700; color: var(--fg-muted); opacity: .8; }
+.shop-hint { margin: 0 0 8px; font-size: .8rem; color: var(--yellow, #ffd166); font-weight: 700; }
 .card .cname { font-weight: 900; font-size: .92rem; margin-left: 16px; line-height: 1.15; }
 .card .ctype { font-size: .62rem; text-transform: uppercase; letter-spacing: .14em; color: var(--fg-muted); margin-left: 16px; font-weight: 800; }
 .card .ctext { font-size: .78rem; color: #dadcff; flex: 1; line-height: 1.35; }
