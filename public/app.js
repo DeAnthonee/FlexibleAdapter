@@ -925,11 +925,28 @@
       el('div', { class: 'action-row' }, el('button', { class: 'btn', onclick: closeModal }, 'Cancel')));
   }
 
+  /** Winner first, then survivors by stars, then the fallen in reverse order of going out (stars break ties). */
   function standings() {
-    const sorted = [...state.players].sort((a, b) => (b.alive - a.alive) || (b.vp - a.vp) || (b.hp - a.hp));
-    return el('ul', { class: 'standings' }, sorted.map(p => el('li', {},
-      art(monster(p.monster), 'art standing-art', { thumb: true }), el('b', {}, p.name), p.alive ? null : el('small', { class: 'hint', style: 'margin:0' }, 'out'),
-      el('span', { class: 'pts' }, `${p.vp} ★`))));
+    const sorted = [...state.players].sort((a, b) =>
+      ((b.id === state.winner) - (a.id === state.winner))
+      || (b.alive - a.alive)
+      || (!a.alive && !b.alive ? ((b.outAt || 0) - (a.outAt || 0)) : 0)
+      || (b.vp - a.vp)
+      || (b.hp - a.hp));
+    const outCount = state.players.filter(p => !p.alive).length;
+    const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+    return el('ul', { class: 'standings' }, sorted.map((p, i) => {
+      let note = null;
+      if (p.id === state.winner) note = el('small', { class: 'tag win' }, '🏆 winner');
+      else if (p.alive) note = el('small', { class: 'tag' }, 'survived');
+      else if (p.left) note = el('small', { class: 'tag out' }, 'left');
+      else if (p.outAt) note = el('small', { class: 'tag out' }, `💀 ${ordinal(p.outAt)} out`);
+      else note = el('small', { class: 'tag out' }, 'out');
+      return el('li', { class: i === 0 ? 'first' : '' },
+        el('span', { class: 'rank' }, i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`),
+        art(monster(p.monster), 'art standing-art', { thumb: true }), el('b', {}, p.name), note,
+        el('span', { class: 'pts' }, `${p.vp} ★`));
+    }));
   }
 
   function renderModal(t, cur, self, d) {

@@ -760,6 +760,24 @@ test('Kookie: Snack Time turns hearts into energy while in Tokyo', () => {
   assert.equal(k.hp, 10);
 });
 
+test('final standings: winner, then survivors by stars, then the fallen by how long they lasted', () => {
+  const g = makeGame(5);
+  const [a, b, c, d, e] = g.players;
+  a.vp = 20; b.vp = 9; c.vp = 15; d.vp = 2; e.vp = 2; e.hp = 4;
+  // c went out first, then d, then e (all by damage)
+  for (const p of [c, d, e]) { p.hp = 1; g.damage(p, 5, { source: a, attack: true }); }
+  g.winner = a.id;
+  assert.deepEqual(Game.rankPlayers(g.players, g.winner).map(p => p.id), [a.id, b.id, e.id, d.id, c.id],
+    'winner, the survivor, then the last to fall first (e over d on order, even with equal stars; c last despite most stars)');
+  // with no winner (host ended the game) the alive monster with most stars leads
+  g.winner = null;
+  assert.deepEqual(Game.rankPlayers(g.players, null).map(p => p.id), [a.id, b.id, e.id, d.id, c.id]);
+  // leaving the game counts as going out, in order
+  const r = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.player(e.id).outAt, 3, 'elimination order survives a restore');
+  assert.equal(r.outSeq, 3);
+});
+
 test('new monsters survive a save and restore mid-game', () => {
   const g = plusTable(['cthulhu', 'pandakai']);
   const c = byMonster(g, 'cthulhu');

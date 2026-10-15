@@ -521,6 +521,11 @@ h2.display { font-size: 2.2rem; margin: 0 0 4px; }
 .standings { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .standings li { display: flex; gap: 10px; align-items: center; background: var(--ink); border-radius: 10px; padding: 6px 10px; }
 .standings .pts { margin-left: auto; font-family: var(--display); color: var(--vp); font-size: 1.2rem; }
+.standings .rank { font-family: var(--display); font-size: 1.1rem; min-width: 1.8em; text-align: center; color: var(--fg-muted); }
+.standings li.first { border: 1px solid rgba(255, 209, 102, .6); box-shadow: 0 0 14px rgba(255, 209, 102, .25); }
+.standings .tag { font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; color: var(--cyan); white-space: nowrap; }
+.standings .tag.win { color: var(--yellow, #ffd166); }
+.standings .tag.out { color: var(--fg-muted); }
 
 /* ---------------------------------------------------- attack effects */
 .pcard, .tokyo-slot { position: relative; }
