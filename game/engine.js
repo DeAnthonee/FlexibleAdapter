@@ -91,6 +91,7 @@ export class Game {
     this.decisions = [];      // pending questions, first one is active
     this.resumers = new Map();// decision id -> callback(answer)
     this.nextDecisionId = 1;
+    this.outSeq = 0;          // counts monsters leaving play, so the final standings know who lasted longest
     this.createdAt = Date.now();
     this.updatedAt = Date.now();
   }
@@ -184,6 +185,7 @@ export class Game {
       id, name, monster: monsterId,
       hp: BASE_HP, maxHp: BASE_HP, vp: 0, energy: 0,
       cards: [], mimicTarget: null, alive: true, poison: 0, shrink: 0, connected: true, left: false, bot,
+      outAt: 0,                // order in which this monster left play (0 = still in)
       tokyoStreak: 0,          // turns in a row ended in Tokyo (Cthulhu's Dreaming Deep)
     };
     this.players.push(p);
@@ -540,6 +542,7 @@ export class Game {
     }
     p.alive = false;
     p.hp = 0;
+    p.outAt = ++this.outSeq;
     this.log(`💀 ${p.name} has been eliminated!`);
     this.emit({ type: 'ko', to: p.id });
     for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
@@ -561,6 +564,7 @@ export class Game {
     this.log(why);
     this.leaveTokyo(p);
     p.alive = false; p.hp = 0;
+    p.outAt = ++this.outSeq;
     for (const id of p.cards.splice(0)) { this.discard.push(id); this.cardLeftPlay(id); }
     p.mimicTarget = null;
     this.dropDecisionsFor(p);
@@ -1072,7 +1076,7 @@ export class Game {
       deck: [...this.deck], discard: [...this.discard], shop: [...this.shop],
       players: this.players.map(p => ({ ...p })),
       turn: this.turn ? JSON.parse(JSON.stringify(this.turn)) : null,
-      logs: this.logs.slice(-200), seq: this.seq, nextDecisionId: this.nextDecisionId,
+      logs: this.logs.slice(-200), seq: this.seq, nextDecisionId: this.nextDecisionId, outSeq: this.outSeq,
       createdAt: this.createdAt, updatedAt: this.updatedAt,
     };
   }
@@ -1084,11 +1088,25 @@ export class Game {
     g.options = { ...DEFAULT_OPTIONS, ...(d.options || {}) };
     g.bayActive = !!d.bayActive; g.tokyo = { city: null, bay: null, ...(d.tokyo || {}) };
     g.deck = [...(d.deck || [])]; g.discard = [...(d.discard || [])]; g.shop = [...(d.shop || [])];
-    g.players = (d.players || []).map(p => ({ tokyoStreak: 0, ...p, connected: !!p.bot }));
+    g.players = (d.players || []).map(p => ({ tokyoStreak: 0, outAt: 0, ...p, connected: !!p.bot }));
     g.turn = d.turn ? JSON.parse(JSON.stringify(d.turn)) : null;
-    g.logs = [...(d.logs || [])]; g.seq = d.seq || 0; g.nextDecisionId = d.nextDecisionId || 1;
+    g.logs = [...(d.logs || [])]; g.seq = d.seq || 0; g.nextDecisionId = d.nextDecisionId || 1; g.outSeq = d.outSeq || 0;
     g.createdAt = d.createdAt || Date.now(); g.updatedAt = d.updatedAt || Date.now();
     return g;
+  }
+
+  /**
+   * Final ranking: the winner, then monsters still in play by stars, then the monsters
+   * that went out in reverse order (the one that lasted longest ranks highest), stars
+   * breaking ties. Life breaks any remaining tie.
+   */
+  static rankPlayers(players, winnerId) {
+    return [...players].sort((a, b) =>
+      ((b.id === winnerId) - (a.id === winnerId))
+      || (b.alive - a.alive)
+      || (!a.alive && !b.alive ? (b.outAt - a.outAt) : 0)
+      || (b.vp - a.vp)
+      || (b.hp - a.hp));
   }
 
   // ------------------------------------------------------------- state

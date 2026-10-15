@@ -121,6 +121,9 @@ npm test
   the Bay closing when fewer than 5 monsters remain.
 - Win by 20 ★ (claimed at the end of the turn, so you have to survive it) or by
   being the last monster standing.
+  The final standings list the winner, then the surviving monsters by stars,
+  then the fallen in reverse order of going out (the one that lasted longest
+  ranks higher), with stars breaking ties.
 - Card shop: three face-up cards, buy, sweep for 2 ⚡, Keep vs Discard cards,
   reshuffle when the deck runs out.
 - All 61 cards from the base set, including the interactive ones:
